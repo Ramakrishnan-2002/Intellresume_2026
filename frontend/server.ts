@@ -168,7 +168,7 @@ Target Job Description (if any): "${jobDescription || "N/A"}"
 Current User Context (if modifying): ${JSON.stringify(currentData || {})}`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.7-flash",
+      model: "gemini-3.6-flash",
       contents: userPrompt,
       config: {
         systemInstruction,
@@ -317,7 +317,7 @@ Output valid JSON:
 }`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.7-flash",
+      model: "gemini-3.6-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -363,7 +363,7 @@ Current user resume target: ${resumeContext?.targetRole || "Senior Frontend / Fu
 Context: ${JSON.stringify(resumeContext || {})}`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.7-flash",
+      model: "gemini-3.6-flash",
       contents: message,
       config: {
         systemInstruction,
@@ -411,7 +411,7 @@ Provide 3 distinct polished bullet variations formatted as JSON with keys:
 "options": array of objects with "tag" (e.g., "Performance Focus", "Scale Focus", "Leadership Focus") and "content" (the rewritten bullet), and "scoreImprovement" (e.g., "+7 pts").`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.7-flash",
+      model: "gemini-3.6-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -458,7 +458,7 @@ Output valid JSON with:
 }`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.7-flash",
+      model: "gemini-3.6-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ResumeData, ChatMessage } from '../types';
 import { ThreeAIBrain } from './ThreeAIBrain';
-import { initialChatMessages, avatarUrls } from '../data/mockData';
+import { avatarUrls } from '../data/mockData';
 import {
   Send,
   Paperclip,
@@ -19,11 +19,53 @@ interface AIChatViewProps {
   onApplyOptionToResume?: (text: string) => void;
 }
 
+// Simple markdown → HTML converter (no external deps)
+function markdownToHtml(md: string): string {
+  if (!md) return '';
+  let html = md
+    // Escape HTML first
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    // Headers
+    .replace(/^#### (.*$)/gim, '<h4 class="text-slate-200 font-bold mt-3 mb-1 text-sm">$1</h4>')
+    .replace(/^### (.*$)/gim, '<h3 class="text-slate-100 font-bold mt-4 mb-2 text-base">$1</h3>')
+    .replace(/^## (.*$)/gim, '<h2 class="text-slate-100 font-bold mt-4 mb-2 text-lg">$1</h2>')
+    .replace(/^# (.*$)/gim, '<h1 class="text-slate-100 font-bold mt-4 mb-2 text-xl">$1</h1>')
+    // Bold
+    .replace(/\*\*\*(.*?)\*\*\*/g, '<strong class="text-[#4edea3] font-bold italic">$1</strong>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong class="text-[#4edea3] font-bold">$1</strong>')
+    // Italic
+    .replace(/\*(.*?)\*/g, '<em class="text-slate-300 italic">$1</em>')
+    // Inline code
+    .replace(/`([^`]+)`/g, '<code class="bg-[#0f131d] text-[#4edea3] px-1.5 py-0.5 rounded text-[11px] font-mono border border-[#3c4a42]/40">$1</code>')
+    // Blockquote
+    .replace(/^> (.*$)/gim, '<blockquote class="border-l-2 border-[#4edea3] pl-3 my-2 text-slate-300 italic">$1</blockquote>')
+    // Horizontal rule
+    .replace(/^---+$/gim, '<hr class="border-[#3c4a42]/30 my-3" />')
+    // Unordered list
+    .replace(/^\- (.*$)/gim, '<li class="ml-4 text-slate-200 text-sm leading-relaxed list-disc">$1</li>')
+    .replace(/^\* (.*$)/gim, '<li class="ml-4 text-slate-200 text-sm leading-relaxed list-disc">$1</li>')
+    // Ordered list
+    .replace(/^\d+\. (.*$)/gim, '<li class="ml-4 text-slate-200 text-sm leading-relaxed list-decimal">$1</li>')
+    // Links
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" class="text-[#4edea3] hover:underline">$1</a>');
+
+  // Wrap consecutive <li> elements in <ul> or <ol>
+  html = html.replace(/(<li class="ml-4[^>]*list-disc"[^>]*>.*?<\/li>\n?)+/gs, (match) => `<ul class="space-y-1 my-2">${match}</ul>`);
+  html = html.replace(/(<li class="ml-4[^>]*list-decimal"[^>]*>.*?<\/li>\n?)+/gs, (match) => `<ol class="space-y-1 my-2">${match}</ol>`);
+
+  // Convert newlines to <br> for remaining text (but not inside blocks)
+  html = html.replace(/\n/g, '<br />');
+
+  return html;
+}
+
 export const AIChatView: React.FC<AIChatViewProps> = ({
   resumeData,
   onApplyOptionToResume,
 }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>(initialChatMessages);
+   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -77,7 +119,6 @@ export const AIChatView: React.FC<AIChatViewProps> = ({
       setMessages((prev) => [...prev, aiMsg]);
     } catch (err) {
       console.error('Chat error:', err);
-      // Fallback AI reply
       const aiMsg: ChatMessage = {
         id: `msg-${Date.now() + 1}`,
         sender: 'ai',
@@ -223,7 +264,15 @@ export const AIChatView: React.FC<AIChatViewProps> = ({
                         : 'bg-[#262a35] border border-slate-700/50 rounded-tr-sm text-slate-100 shadow-md'
                     }`}
                   >
-                    <div className="whitespace-pre-wrap">{msg.text}</div>
+                    {/* AI messages: render markdown as HTML */}
+                    {isAi ? (
+                      <div
+                        className="prose prose-invert prose-sm max-w-none"
+                        dangerouslySetInnerHTML={{ __html: markdownToHtml(msg.text) }}
+                      />
+                    ) : (
+                      <div className="whitespace-pre-wrap">{msg.text}</div>
+                    )}
 
                     {/* Preformatted Options / Code Blocks */}
                     {msg.options && (

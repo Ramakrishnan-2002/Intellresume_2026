@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ResumeData, ActivityItem, ActiveTab } from './types';
-import { initialResumeData, initialActivities } from './data/mockData';
+//import { initialResumeData, initialActivities } from './data/mockData';
 import { SideNavBar } from './components/SideNavBar';
 import { TopAppBar } from './components/TopAppBar';
 import { DashboardView } from './components/DashboardView';
@@ -17,8 +17,39 @@ import confetti from 'canvas-confetti';
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
-  const [resumeData, setResumeData] = useState<ResumeData>(initialResumeData);
-  const [activities, setActivities] = useState<ActivityItem[]>(initialActivities);
+    const [resumeData, setResumeData] = useState<ResumeData>({
+    id: '',
+    title: '',
+    status: 'DRAFT',
+    personalInfo: {
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      location: '',
+      title: '',
+      summary: '',
+      linkedin: '',
+      github: '',
+    },
+    experience: [],
+    skills: {
+      languages: [],
+      frameworks: [],
+      tools: [],
+      cloud: [],
+    },
+    education: [],
+    projects: [],
+    metrics: {
+      resumeScore: 0,
+      jdMatchRate: 0,
+      profileViews: 0,
+      aiCredits: 50,
+    },
+  });
+
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Modals
