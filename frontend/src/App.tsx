@@ -233,7 +233,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen w-screen bg-[#0B0F19] text-[#dfe2f1] overflow-hidden font-sans select-none">
+    <div className="flex h-screen w-screen bg-[#0B0F19] text-[#dfe2f1] overflow-hidden font-sans ">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-[#1c1f2a] border border-[#4edea3]/50 text-slate-100 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 text-xs font-medium animate-in slide-in-from-bottom-5 duration-300">
