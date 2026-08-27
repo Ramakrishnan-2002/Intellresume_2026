@@ -1,0 +1,6 @@
+{
+  "name": "IntelliResume",
+  "description": "AI-Powered Resume Studio with interactive 3D canvas viewport, telemetry dashboard, AI Chat assistant, ATS & JD matching engine, and PDF export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
