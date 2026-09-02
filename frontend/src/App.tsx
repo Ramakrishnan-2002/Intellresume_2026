@@ -11,6 +11,7 @@ import { AuthPortalView } from './components/AuthPortalView';
 import { JDMatcherModal } from './components/JDMatcherModal';
 import { AIReviewModal } from './components/AIReviewModal';
 import { AIGenerateModal } from './components/AIGenerateModal';
+import { apiClient } from './services/api';
 import confetti from 'canvas-confetti';
 
 export default function App() {
@@ -49,6 +50,21 @@ export default function App() {
   const [isAIReviewOpen, setIsAIReviewOpen] = useState(false);
   const [isAIGenerateOpen, setIsAIGenerateOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Distributed Systems & OCC State
+  const [resumeVersion, setResumeVersion] = useState<number>(1);
+  const [conflictModalOpen, setConflictModalOpen] = useState<boolean>(false);
+  const [conflictDetails, setConflictDetails] = useState<{ serverVersion: number; clientVersion: number } | null>(null);
+  const [isAIDegraded, setIsAIDegraded] = useState<boolean>(false);
+
+  useEffect(() => {
+    // Probe backend readiness and circuit breaker status on launch
+    apiClient.getHealth().then((h) => {
+      if (h.circuitState === 'OPEN') {
+        setIsAIDegraded(true);
+      }
+    }).catch(() => {});
+  }, []);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -207,15 +223,30 @@ export default function App() {
     showToast('Executive Summary updated successfully!');
   };
 
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
     try {
       localStorage.setItem('intelliresume_data', JSON.stringify(resumeData));
       localStorage.setItem('intelliresume_activities', JSON.stringify(activities));
-      confetti({ particleCount: 35, spread: 50, origin: { y: 0.8 } });
-      showToast('Resume draft state saved to workspace storage.');
     } catch (err) {
       console.warn('Could not save to localStorage:', err);
-      showToast('Resume draft state updated.');
+    }
+
+    try {
+      const res = await apiClient.saveResume(resumeData, resumeVersion);
+      setResumeVersion(res.version);
+      confetti({ particleCount: 35, spread: 50, origin: { y: 0.8 } });
+      showToast(`Resume draft saved to cloud storage (v${res.version}).`);
+    } catch (err: any) {
+      if (err.status === 409 || err.code === 'OPTIMISTIC_CONCURRENCY_CONFLICT') {
+        setConflictDetails({
+          serverVersion: err.serverVersion || resumeVersion + 1,
+          clientVersion: resumeVersion,
+        });
+        setConflictModalOpen(true);
+      } else {
+        confetti({ particleCount: 25, spread: 40, origin: { y: 0.8 } });
+        showToast('Resume draft state saved to local workspace storage.');
+      }
     }
   };
 
@@ -336,6 +367,75 @@ export default function App() {
         resumeData={resumeData}
         onApplyImprovement={handleApplyAIImprovement}
       />
+
+      {/* Optimistic Concurrency Conflict Resolution Dialog */}
+      {conflictModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-[#111827] border border-amber-500/30 rounded-xl max-w-md w-full p-6 shadow-2xl space-y-4 text-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-lg">
+                ⚠️
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg text-white">Conflicting Update Detected</h3>
+                <p className="text-xs text-slate-400">This resume was modified in another tab or session.</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-900/80 border border-slate-800 rounded-lg p-3 text-xs text-slate-300 space-y-1.5 font-mono">
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-sans">Your local version:</span>
+                <span className="text-amber-300">v{conflictDetails?.clientVersion || resumeVersion}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-sans">Latest server version:</span>
+                <span className="text-emerald-400">v{conflictDetails?.serverVersion || resumeVersion + 1}</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              To prevent silently overwriting external edits, choose how you would like to synchronize:
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-2 pt-2">
+              <button
+                onClick={async () => {
+                  try {
+                    const latest = await apiClient.getResume(resumeData.id);
+                    setResumeData(latest.data);
+                    setResumeVersion(latest.version);
+                    setConflictModalOpen(false);
+                    showToast(`Reloaded latest server version (v${latest.version}).`);
+                  } catch (e) {
+                    setConflictModalOpen(false);
+                    showToast('Failed to reload from server; keeping local draft.');
+                  }
+                }}
+                className="flex-1 py-2 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                🔄 Reload Latest Version
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const forceVersion = conflictDetails?.serverVersion || resumeVersion + 1;
+                    const res = await apiClient.saveResume(resumeData, forceVersion);
+                    setResumeVersion(res.version);
+                    setConflictModalOpen(false);
+                    showToast(`Saved local changes as new version (v${res.version}).`);
+                  } catch (e) {
+                    setConflictModalOpen(false);
+                    showToast('Saved locally.');
+                  }
+                }}
+                className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700 transition-colors cursor-pointer"
+              >
+                💾 Keep Current Version
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
