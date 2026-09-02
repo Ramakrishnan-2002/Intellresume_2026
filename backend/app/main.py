@@ -1,38 +1,88 @@
-import time
-import uuid
+"""
+main.py — FastAPI application factory and wiring.
+
+Startup order:
+  1. Redis connection established (lifespan)
+  2. SQLite tables initialized
+  3. Middleware registered (correlation IDs, CORS, body size)
+  4. Exception handlers registered (normalized errors)
+  5. Routers mounted (auth, resumes, AI, health)
+
+Shutdown order:
+  1. FastAPI lifespan context exits
+  2. Redis connection gracefully closed
+
+This file is intentionally free of business logic.
+"""
+
+from __future__ import annotations
+
+import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import FastAPI, Request, Response, status
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import text
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import models
-from .database import engine, SessionLocal
-from .routers import auth, api, resumes
+from .core.correlation import CorrelationMiddleware
+from .core.errors import (
+    AppError,
+    app_error_handler,
+    http_exception_handler,
+    unhandled_exception_handler,
+)
+from .database import SessionLocal, engine
+from .infrastructure import redis_client
+from .routers import ai, auth, health, resumes
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+logger = logging.getLogger("intelliresume")
+
+
+# ─── Application lifespan (startup / shutdown hooks) ──────────────────────────
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    """
+    Startup: initialize Redis connection.
+    Shutdown: gracefully close Redis.
+    """
+    await redis_client.connect()
+    yield
+    await redis_client.disconnect()
+
+
+# ─── Application factory ──────────────────────────────────────────────────────
 
 app = FastAPI(
     title="IntelliResume API",
-    description="Resilient backend for IntelliResume 2026",
-    version="2.1.0",
+    description=(
+        "Production-grade IntelliResume 2026 backend.\n\n"
+        "Python/FastAPI is the authoritative implementation of all "
+        "distributed-systems mechanisms: rate limiting, idempotency, "
+        "request coalescing, bulkhead, circuit breaker, retry, "
+        "AI orchestration, authentication, and persistence."
+    ),
+    version="3.0.0",
+    lifespan=lifespan,
 )
 
-# ─── Correlation ID & Structured Access Logging ──────────
-@app.middleware("http")
-async def correlation_id_middleware(request: Request, call_next):
-    request_id = request.headers.get("X-Request-Id") or str(uuid.uuid4())
-    start_time = time.time()
-    
-    response = await call_next(request)
-    
-    duration_ms = round((time.time() - start_time) * 1000, 2)
-    response.headers["X-Request-Id"] = request_id
-    response.headers["X-Response-Time-Ms"] = str(duration_ms)
-    
-    return response
 
-# ─── CORS ───────────────────────────────────────────────
+# ─── Middleware (outermost → innermost) ───────────────────────────────────────
+
+# 1. Correlation IDs — sanitize X-Request-Id, set in contextvars, echo in response
+app.add_middleware(CorrelationMiddleware)
+
+# 2. CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -41,7 +91,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ─── Database Tables Initialization & Migrations ────────
+
+# ─── Exception handlers ───────────────────────────────────────────────────────
+
+app.add_exception_handler(AppError, app_error_handler)
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
+
+
+# ─── Database initialization ──────────────────────────────────────────────────
+
 models.Base.metadata.create_all(bind=engine)
 
 with engine.connect() as conn:
@@ -51,55 +110,17 @@ with engine.connect() as conn:
     except Exception:
         pass  # Column already exists
 
-# ─── Health & Readiness Probes ──────────────────────────
-@app.get("/health/live", tags=["Health"])
-async def liveness():
-    """Liveness probe: verifies the process is responsive."""
-    return {"status": "alive", "service": "intelliresume-backend", "timestamp": time.time()}
 
-@app.get("/health/ready", tags=["Health"])
-async def readiness():
-    """
-    Readiness probe: verifies critical dependencies (SQLite database).
-    Checks if DB is responsive.
-    """
-    db_ok = False
-    redis_ok = False
-    
-    # 1. Check SQLite database connectivity
-    try:
-        with SessionLocal() as db:
-            db.execute(text("SELECT 1"))
-        db_ok = True
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={"status": "unready", "database": f"error: {str(e)}"}
-        )
+# ─── Routers ──────────────────────────────────────────────────────────────────
 
-    # 2. Check Redis (optional dependency, non-blocking)
-    redis_host = os.getenv("REDIS_HOST", "redis")
-    redis_port = int(os.getenv("REDIS_PORT", "6379"))
-    try:
-        import redis
-        r = redis.Redis(host=redis_host, port=redis_port, socket_timeout=1.0)
-        redis_ok = r.ping()
-    except Exception:
-        redis_ok = False
+app.include_router(health.router)   # /health/live, /health/ready, /api/health
+app.include_router(auth.router)     # /api/auth/*
+app.include_router(resumes.router)  # /api/resumes/*
+app.include_router(ai.router)       # /api/generate-resume, /api/ai-audit, etc.
 
-    return {
-        "status": "ready",
-        "database": "connected" if db_ok else "unhealthy",
-        "redis": "connected" if redis_ok else "unavailable_or_not_used",
-        "timestamp": time.time(),
-    }
 
-# ─── API Routers ────────────────────────────────────────
-app.include_router(auth.router)
-app.include_router(resumes.router)
-app.include_router(api.router)
+# ─── Static / SPA fallback (optional: only if dist/ is present) ───────────────
 
-# ─── Static / SPA Fallback ──────────────────────────────
 DIST_DIR = Path(__file__).resolve().parent.parent / "dist"
 if DIST_DIR.exists():
     app.mount("/assets", StaticFiles(directory=str(DIST_DIR / "assets")), name="assets")

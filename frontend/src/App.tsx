@@ -11,6 +11,7 @@ import { AuthPortalView } from './components/AuthPortalView';
 import { JDMatcherModal } from './components/JDMatcherModal';
 import { AIReviewModal } from './components/AIReviewModal';
 import { AIGenerateModal } from './components/AIGenerateModal';
+import { ResumeDocument } from './components/ResumeDocument';
 import { apiClient } from './services/api';
 import confetti from 'canvas-confetti';
 
@@ -267,84 +268,89 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [resumeData, activities, activeTab]);
 
-  // If Auth tab is active or not authenticated, render Auth Portal
-  if (!isAuthenticated || activeTab === 'auth') {
-    return (
-      <AuthPortalView
-        onSuccessAuth={() => {
-          setIsAuthenticated(true);
-          setActiveTab('dashboard');
-        }}
-      />
-    );
-  }
-
   return (
     <>
-      <AppShell
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        resumeData={resumeData}
-        toastMessage={toastMessage}
-        onNewResume={handleNewResume}
-        onOpenAIGenerator={() => setIsAIGenerateOpen(true)}
-        onOpenJDMatcher={() => setIsJDModalOpen(true)}
-        onOpenAIReview={() => setIsAIReviewOpen(true)}
-        onSaveDraft={handleSaveDraft}
-      >
-        {activeTab === 'dashboard' && (
-          <DashboardView
-            data={resumeData}
-            activities={activities}
-            setActiveTab={setActiveTab}
-            onOpenJDMatcher={() => setIsJDModalOpen(true)}
-            onOpenAIGenerator={() => setIsAIGenerateOpen(true)}
-            onNewResume={handleNewResume}
-          />
-        )}
-
-        {activeTab === 'studio' && (
-          <ResumeStudioView
-            data={resumeData}
-            setData={setResumeData}
-            onOpenJDMatcher={() => setIsJDModalOpen(true)}
-            onOpenAIReview={() => setIsAIReviewOpen(true)}
-            onOpenAIGenerator={() => setIsAIGenerateOpen(true)}
-            onSaveDraft={handleSaveDraft}
-          />
-        )}
-
-        {activeTab === 'chat' && (
-          <AIChatView
-            resumeData={resumeData}
-            onApplyOptionToResume={(text) => {
-              setResumeData((prev) => {
-                const updatedExp = [...prev.experience];
-                if (updatedExp[0]) {
-                  updatedExp[0].bullets[0] = text;
-                }
-                return { ...prev, experience: updatedExp };
-              });
-              showToast('Applied bullet to Resume experience!');
+      {/* 1. Screen Application Workspace (100% hidden during browser print) */}
+      <div id="screen-root" className="print:hidden flex flex-col h-full w-full">
+        {(!isAuthenticated || activeTab === 'auth') ? (
+          <AuthPortalView
+            onSuccessAuth={() => {
+              setIsAuthenticated(true);
+              setActiveTab('dashboard');
             }}
           />
-        )}
-
-        {activeTab === 'analytics' && (
-          <AnalyticsView
-            data={resumeData}
-            onOpenJDMatcher={() => setIsJDModalOpen(true)}
-          />
-        )}
-
-        {activeTab === 'settings' && (
-          <SettingsView
+        ) : (
+          <AppShell
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
             resumeData={resumeData}
-            onUpdateResumeData={setResumeData}
-            onSave={() => showToast('Settings saved successfully.')}
-          />
+            toastMessage={toastMessage}
+            onNewResume={handleNewResume}
+            onOpenAIGenerator={() => setIsAIGenerateOpen(true)}
+            onOpenJDMatcher={() => setIsJDModalOpen(true)}
+            onOpenAIReview={() => setIsAIReviewOpen(true)}
+            onSaveDraft={handleSaveDraft}
+          >
+            {activeTab === 'dashboard' && (
+              <DashboardView
+                data={resumeData}
+                activities={activities}
+                setActiveTab={setActiveTab}
+                onOpenJDMatcher={() => setIsJDModalOpen(true)}
+                onOpenAIGenerator={() => setIsAIGenerateOpen(true)}
+                onNewResume={handleNewResume}
+              />
+            )}
+
+            {activeTab === 'studio' && (
+              <ResumeStudioView
+                data={resumeData}
+                setData={setResumeData}
+                onOpenJDMatcher={() => setIsJDModalOpen(true)}
+                onOpenAIReview={() => setIsAIReviewOpen(true)}
+                onOpenAIGenerator={() => setIsAIGenerateOpen(true)}
+                onSaveDraft={handleSaveDraft}
+              />
+            )}
+
+            {activeTab === 'chat' && (
+              <AIChatView
+                resumeData={resumeData}
+                onApplyOptionToResume={(text) => {
+                  setResumeData((prev) => {
+                    const updatedExp = [...prev.experience];
+                    if (updatedExp[0]) {
+                      updatedExp[0].bullets[0] = text;
+                    }
+                    return { ...prev, experience: updatedExp };
+                  });
+                  showToast('Applied bullet to Resume experience!');
+                }}
+              />
+            )}
+
+            {activeTab === 'analytics' && (
+              <AnalyticsView
+                data={resumeData}
+                onOpenJDMatcher={() => setIsJDModalOpen(true)}
+              />
+            )}
+
+            {activeTab === 'settings' && (
+              <SettingsView
+                resumeData={resumeData}
+                onUpdateResumeData={setResumeData}
+                onSave={() => showToast('Settings saved successfully.')}
+              />
+            )}
+          </AppShell>
         )}
-      </AppShell>
+      </div>
+
+      {/* 2. Dedicated Isolated Print Portal (Visible ONLY in print / PDF export mode) */}
+      <div id="print-root" className="hidden print:block">
+        <ResumeDocument data={resumeData} />
+      </div>
 
       {/* Modals */}
       <AIGenerateModal

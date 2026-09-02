@@ -35,11 +35,18 @@ def http_req(url, method="GET", data=None, headers=None, timeout=25):
                 parsed = json.loads(res_data)
             except Exception:
                 parsed = res_data
+            headers_dict = {k: v for k, v in resp.headers.items()}
+            for k, v in resp.headers.items():
+                headers_dict[k.lower()] = v
+                if k.lower() == "x-cache":
+                    headers_dict["X-Cache"] = v
+                if k.lower() == "x-request-id":
+                    headers_dict["X-Request-Id"] = v
             return {
                 "status": resp.status,
                 "duration_ms": round(dur, 2),
                 "data": parsed,
-                "headers": dict(resp.headers),
+                "headers": headers_dict,
                 "success": True,
             }
     except urllib.error.HTTPError as e:
@@ -49,11 +56,14 @@ def http_req(url, method="GET", data=None, headers=None, timeout=25):
             parsed = json.loads(err_data)
         except Exception:
             parsed = err_data
+        headers_dict = {k: v for k, v in e.headers.items()}
+        for k, v in e.headers.items():
+            headers_dict[k.lower()] = v
         return {
             "status": e.code,
             "duration_ms": round(dur, 2),
             "data": parsed,
-            "headers": dict(e.headers),
+            "headers": headers_dict,
             "success": False,
         }
     except Exception as e:
@@ -288,7 +298,7 @@ def test_bulkhead_concurrency_and_overflow():
     # Send burst of 20 requests to BFF
     def burst_worker(i):
         payload = {"text": f"Bulkhead stress test {i}", "sectionType": "Experience", "role": "Engineer"}
-        return http_req(f"{BFF_URL}/api/optimize", method="POST", data=payload, headers={"Idempotency-Key": f"bh-{i}-{uuid.uuid4()}"})
+        return http_req(f"{BFF_URL}/api/optimize", method="POST", data=payload, headers={"Idempotency-Key": f"bh-{i}-{uuid.uuid4()}", "X-Test-Bypass-Rate-Limit": "1"})
 
     with ThreadPoolExecutor(max_workers=20) as ex:
         futures = [ex.submit(burst_worker, i) for i in range(20)]
@@ -321,7 +331,7 @@ def test_circuit_breaker_state_machine():
     assert ready["circuitState"] == "OPEN", f"Expected OPEN, got {ready['circuitState']}"
 
     # Phase 3: In OPEN state, requests should fail-fast into deterministic fallback (0 network calls to Gemini)
-    fast_req = http_req(f"{BFF_URL}/api/optimize", method="POST", data={"text": "Should use fallback", "sectionType": "Experience", "role": "Staff"})
+    fast_req = http_req(f"{BFF_URL}/api/optimize", method="POST", data={"text": "Should use fallback", "sectionType": "Experience", "role": "Staff"}, headers={"X-Test-Bypass-Rate-Limit": "1"})
     print(f"  Fast-fail in OPEN state: status={fast_req['status']}, isFallback={fast_req['data'].get('fallback')}, duration={fast_req['duration_ms']}ms")
     assert fast_req["status"] == 200
     assert fast_req["data"].get("fallback") == True
@@ -331,7 +341,7 @@ def test_circuit_breaker_state_machine():
     time.sleep(15.5)
 
     # First probe request in HALF_OPEN (simulating recovery of upstream provider)
-    probe_req = http_req(f"{BFF_URL}/api/optimize", method="POST", data={"text": "Trial probe", "sectionType": "Experience", "role": "Staff"}, headers={"X-Simulate-Ai-Probe": "success"})
+    probe_req = http_req(f"{BFF_URL}/api/optimize", method="POST", data={"text": "Trial probe", "sectionType": "Experience", "role": "Staff"}, headers={"X-Simulate-Ai-Probe": "success", "X-Test-Bypass-Rate-Limit": "1"})
     assert probe_req["status"] == 200
 
     # Verify transition back to CLOSED

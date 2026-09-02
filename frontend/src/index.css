@@ -142,14 +142,14 @@
   background: rgba(255, 255, 255, 0.25);
 }
 
-/* Bulletproof Print styles for vector PDF export */
+/* Bulletproof Print Stylesheet for Vector PDF Export */
 @media print {
   @page {
-    margin: 0.4in;
-    size: letter portrait;
+    size: A4 portrait;
+    margin: 12mm 15mm 12mm 15mm;
   }
 
-  /* Reset body and html for uninterrupted page flow */
+  /* Reset body and html for clean uninterrupted page flow */
   html, body {
     background: #ffffff !important;
     color: #0f172a !important;
@@ -159,55 +159,58 @@
     overflow: visible !important;
     height: auto !important;
     width: 100% !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
-  /* Hide application shell navigation, headers, toolbars, drawer, and modals */
+  /* Completely eliminate all screen UI, app headers, navigation, sidebars, buttons, toolbars, shaders */
+  #screen-root,
+  .print\:hidden,
   .no-print,
   nav,
   aside,
+  footer,
   button,
   .app-header {
     display: none !important;
     visibility: hidden !important;
-  }
-
-  /* Ensure all parent containers do not truncate or hide overflow */
-  #root,
-  [class*="h-screen"],
-  [class*="h-full"],
-  [class*="overflow-"],
-  [class*="select-"] {
-    overflow: visible !important;
-    height: auto !important;
-    min-height: auto !important;
-    max-height: none !important;
-    position: static !important;
-    transform: none !important;
-    display: block !important;
-  }
-
-  /* Flatten 3D viewport */
-  div[style*="perspective"],
-  div[style*="preserve-3d"],
-  div[style*="rotate"] {
-    perspective: none !important;
-    transform: none !important;
-    transform-style: flat !important;
-    box-shadow: none !important;
-    border: none !important;
-    padding: 0 !important;
+    height: 0 !important;
+    width: 0 !important;
+    overflow: hidden !important;
     margin: 0 !important;
-    width: 100% !important;
-    height: auto !important;
-    overflow: visible !important;
+    padding: 0 !important;
   }
 
-  /* Printable Resume Document */
-  #resume-printable-doc {
+  /* Explicitly guarantee the resume document's header and title are visible */
+  #print-root header,
+  #resume-printable-doc header {
+    display: block !important;
+    visibility: visible !important;
+    height: auto !important;
+    width: 100% !important;
+  }
+
+  /* Display ONLY the dedicated print document portal */
+  #print-root {
     display: block !important;
     visibility: visible !important;
     position: static !important;
     width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  #print-root #resume-printable-doc {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
     min-height: auto !important;
     height: auto !important;
     margin: 0 !important;
@@ -220,17 +223,32 @@
     transform: none !important;
   }
 
-  /* Explicitly guarantee the resume document's own header is visible */
-  #resume-printable-doc header {
-    display: block !important;
-    visibility: visible !important;
+  /* Typography formatting for crisp print rendering */
+  #print-root h1,
+  #print-root h2,
+  #print-root h3,
+  #print-root h4 {
+    color: #0f172a !important;
+  }
+
+  #print-root p,
+  #print-root span,
+  #print-root li {
+    color: #334155 !important;
+  }
+
+  #print-root .text-blue-700,
+  #print-root .text-blue-600,
+  #print-root .text-indigo-600 {
+    color: #1d4ed8 !important;
   }
 
   /* Avoid awkward page break splits across jobs and projects */
   .break-inside-avoid,
-  #resume-printable-doc section,
-  #resume-printable-doc article,
-  #resume-printable-doc li {
+  #print-root section,
+  #print-root article,
+  #print-root li,
+  #print-root header {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
   }

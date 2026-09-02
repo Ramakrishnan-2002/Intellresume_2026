@@ -93,15 +93,20 @@ class GenerateResumeRequest(BaseModel):
 
 class GenerateResumeResponse(BaseModel):
     resume: ResumeData
+    source: Optional[str] = None  # "gemini" | "fallback" | None
+    fallback: Optional[bool] = None  # backward compat with frontend
+    reason: Optional[str] = None     # backward compat: why fallback
 
 class AIAuditRequest(BaseModel):
-    resumeData: ResumeData
+    resumeData: dict  # Accept partial resume data for audit
 
 class AIAuditResponse(BaseModel):
     grade: str
     strengths: List[str]
     weaknesses: List[str]
     suggestedSummary: str
+    source: Optional[str] = None
+    fallback: Optional[bool] = None
 
 class ChatRequest(BaseModel):
     message: str
@@ -110,6 +115,8 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     reply: str
+    source: Optional[str] = None
+    fallback: Optional[bool] = None
 
 class OptimizeRequest(BaseModel):
     text: str
@@ -123,6 +130,8 @@ class OptimizeOption(BaseModel):
 class OptimizeResponse(BaseModel):
     options: List[OptimizeOption]
     scoreImprovement: str
+    source: Optional[str] = None
+    fallback: Optional[bool] = None
 
 class MatchJDRequest(BaseModel):
     jobDescription: str
@@ -133,10 +142,14 @@ class MatchJDResponse(BaseModel):
     matchedSkills: List[str]
     missingKeywords: List[str]
     recommendations: List[str]
+    source: Optional[str] = None
+    fallback: Optional[bool] = None
 
 class HealthResponse(BaseModel):
     status: str
     aiConfigured: bool
+    circuitState: Optional[str] = None
+    source: Optional[str] = None
 
 class ResumeSaveRequest(BaseModel):
     title: str
