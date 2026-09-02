@@ -1,196 +1,261 @@
 import React from 'react';
 import { ResumeData } from '../types';
 import {
-  BarChart3,
-  TrendingUp,
-  Award,
-  CheckCircle2,
-  AlertTriangle,
-  Zap,
   Target,
-  FileCheck,
+  CheckCircle2,
+  AlertCircle,
+  BarChart2,
+  FileText,
+  Percent,
+  Cpu,
+  Layers,
+  Sparkles,
 } from 'lucide-react';
+import { Button } from './ui/Button';
+import { Badge } from './ui/Badge';
 
 interface AnalyticsViewProps {
   data: ResumeData;
   onOpenJDMatcher: () => void;
 }
 
+const ACTION_VERB_REGEX =
+  /^(Architected|Led|Engineered|Spearheaded|Delivered|Designed|Developed|Optimized|Scaled|Accelerated|Automated|Built|Orchestrated|Reduced|Increased|Mentored|Formulated|Deployed|Initiated|Published)\b/i;
+
+const NUMBER_REGEX = /\d+%|\$\d+|\d+\+|\d+x|\b\d+\b/;
+
 export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ data, onOpenJDMatcher }) => {
+  // Real client-side derived analytics
+  const allBullets =
+    data.experience?.flatMap((e) => e.bullets || []) || [];
+  const totalBullets = allBullets.length;
+
+  const quantifiedBullets = allBullets.filter((b) => NUMBER_REGEX.test(b)).length;
+  const quantifiedPercent =
+    totalBullets > 0 ? Math.round((quantifiedBullets / totalBullets) * 100) : 0;
+
+  const actionVerbBullets = allBullets.filter((b) => ACTION_VERB_REGEX.test(b.trim())).length;
+  const actionVerbPercent =
+    totalBullets > 0 ? Math.round((actionVerbBullets / totalBullets) * 100) : 0;
+
+  // Word count
+  const summaryWords = (data.personalInfo?.summary || '').split(/\s+/).filter(Boolean).length;
+  const experienceWords = allBullets.join(' ').split(/\s+/).filter(Boolean).length;
+  const projectWords = (data.projects || [])
+    .map((p) => p.description || '')
+    .join(' ')
+    .split(/\s+/)
+    .filter(Boolean).length;
+  const totalWords = summaryWords + experienceWords + projectWords;
+
+  // Skills counts
+  const languagesCount = data.skills?.languages?.length || 0;
+  const frameworksCount = data.skills?.frameworks?.length || 0;
+  const toolsCount = data.skills?.tools?.length || 0;
+  const cloudCount = data.skills?.cloud?.length || 0;
+  const totalSkills = languagesCount + frameworksCount + toolsCount + cloudCount;
+
+  // Structural checks
+  const checks = [
+    {
+      label: 'Contact Details & Location',
+      passed: !!(data.personalInfo?.email && data.personalInfo?.location),
+      desc: data.personalInfo?.email ? data.personalInfo.email : 'Missing email or location',
+    },
+    {
+      label: 'Executive Summary Depth',
+      passed: summaryWords >= 25,
+      desc: `${summaryWords} words (Target: 30-60 words)`,
+    },
+    {
+      label: 'Experience Item Count',
+      passed: (data.experience?.length || 0) >= 2,
+      desc: `${data.experience?.length || 0} positions documented`,
+    },
+    {
+      label: 'Measurable Achievements Ratio',
+      passed: quantifiedPercent >= 50,
+      desc: `${quantifiedBullets} of ${totalBullets} bullets (${quantifiedPercent}%) contain metrics`,
+    },
+    {
+      label: 'Action Verb Openers',
+      passed: actionVerbPercent >= 70,
+      desc: `${actionVerbBullets} of ${totalBullets} bullets (${actionVerbPercent}%) start with strong action verbs`,
+    },
+    {
+      label: 'Technical Skill Breadth',
+      passed: totalSkills >= 10,
+      desc: `${totalSkills} total skills across 4 categories`,
+    },
+    {
+      label: 'Education Section',
+      passed: (data.education?.length || 0) >= 1,
+      desc: `${data.education?.length || 0} degree credentials listed`,
+    },
+  ];
+
+  const passedCount = checks.filter((c) => c.passed).length;
+  const structuralScore = Math.round((passedCount / checks.length) * 100);
+
   return (
-    <div className="flex-1 overflow-y-auto p-6 lg:p-8 bg-[#090D16] text-[#dfe2f1]">
-      <div className="max-w-[1400px] mx-auto space-y-8">
+    <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-[#080c14] text-[#f8fafc] font-sans selection:bg-blue-600/30">
+      <div className="max-w-5xl mx-auto space-y-8">
         {/* Header */}
-        <div className="flex justify-between items-center flex-wrap gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/[0.08]">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-100 font-['Plus_Jakarta_Sans']">
-              ATS Telemetry &amp; Keyword Analytics
-            </h1>
-            <p className="text-xs text-slate-400 mt-1 font-mono">
-              Real-time deep scan of resume format, keyword distribution, and impact strength.
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-bold text-white font-mono uppercase tracking-wider">
+                ATS Readiness & Keyword Audit
+              </span>
+              <Badge variant="blue">Deterministic Telemetry</Badge>
+            </div>
+            <p className="text-xs text-slate-400">
+              Honest structural analysis derived directly from your active resume document.
             </p>
           </div>
-          <button
+
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={onOpenJDMatcher}
-            className="btn-spring bg-[#4edea3] text-[#003824] font-bold text-xs px-4 py-2.5 rounded-lg flex items-center gap-2 shadow-lg shadow-[#4edea3]/20"
+            icon={<Target className="w-3.5 h-3.5 text-blue-400" />}
           >
-            <Target className="w-4 h-4" />
-            <span>Re-Scan Against Job Description</span>
-          </button>
+            Target Job Description
+          </Button>
         </div>
 
-        {/* High Level Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Card 1 */}
-          <div className="bg-[#111827] border border-[#1F2937] rounded-xl p-6 flex flex-col justify-between shadow-xl">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <span className="text-xs font-mono text-slate-400 block uppercase">
-                  ATS Readability Index
-                </span>
-                <span className="text-3xl font-extrabold text-[#4edea3] font-mono mt-1 block">
-                  98 / 100
-                </span>
-              </div>
-              <div className="p-3 bg-[#4edea3]/10 text-[#4edea3] rounded-xl border border-[#4edea3]/20">
-                <FileCheck className="w-6 h-6" />
-              </div>
+        {/* Core Metric Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="p-4 rounded-lg bg-[#111724] border border-white/[0.08] space-y-2">
+            <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
+              Structural Score
             </div>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Pristine single-column hierarchy with clean semantic headings. 100% parseable by Taleo,
-              Workday, and Greenhouse.
+            <div className="text-2xl font-bold font-mono text-blue-400">
+              {structuralScore}%
+            </div>
+            <p className="text-[11px] text-slate-400">
+              {passedCount} of {checks.length} structural criteria satisfied.
             </p>
           </div>
 
-          {/* Card 2 */}
-          <div className="bg-[#111827] border border-[#1F2937] rounded-xl p-6 flex flex-col justify-between shadow-xl">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <span className="text-xs font-mono text-slate-400 block uppercase">
-                  Quantified Impact Metric
-                </span>
-                <span className="text-3xl font-extrabold text-[#c0c1ff] font-mono mt-1 block">
-                  83%
-                </span>
-              </div>
-              <div className="p-3 bg-[#c0c1ff]/10 text-[#c0c1ff] rounded-xl border border-[#c0c1ff]/20">
-                <Award className="w-6 h-6" />
-              </div>
+          <div className="p-4 rounded-lg bg-[#111724] border border-white/[0.08] space-y-2">
+            <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
+              Total Word Count
             </div>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              5 of 6 bullet points contain quantifiable numbers, percentages, or scale indicators.
+            <div className="text-2xl font-bold font-mono text-white">
+              {totalWords}
+            </div>
+            <p className="text-[11px] text-slate-400">
+              {totalWords >= 350 && totalWords <= 650
+                ? 'Optimal length for a 1-page technical resume.'
+                : totalWords < 350
+                ? 'Brief profile; consider adding more detail.'
+                : 'Long format; risk of spanning to page 2.'}
             </p>
           </div>
 
-          {/* Card 3 */}
-          <div className="bg-[#111827] border border-[#1F2937] rounded-xl p-6 flex flex-col justify-between shadow-xl">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <span className="text-xs font-mono text-slate-400 block uppercase">
-                  Action Verb Density
-                </span>
-                <span className="text-3xl font-extrabold text-[#ffb783] font-mono mt-1 block">
-                  Top 5%
-                </span>
-              </div>
-              <div className="p-3 bg-[#ffb783]/10 text-[#ffb783] rounded-xl border border-[#ffb783]/20">
-                <Zap className="w-6 h-6" />
-              </div>
+          <div className="p-4 rounded-lg bg-[#111724] border border-white/[0.08] space-y-2">
+            <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
+              Quantified Impact
             </div>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Leading verbs: <em>Architected, Engineered, Spearheaded, Optimized, Deployed</em>.
+            <div className="text-2xl font-bold font-mono text-blue-400">
+              {quantifiedPercent}%
+            </div>
+            <p className="text-[11px] text-slate-400">
+              {quantifiedBullets} of {totalBullets} bullets contain numbers, percentages, or scale metrics.
+            </p>
+          </div>
+
+          <div className="p-4 rounded-lg bg-[#111724] border border-white/[0.08] space-y-2">
+            <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
+              Action Verb Density
+            </div>
+            <div className="text-2xl font-bold font-mono text-sky-400">
+              {actionVerbPercent}%
+            </div>
+            <p className="text-[11px] text-slate-400">
+              {actionVerbBullets} of {totalBullets} bullets begin with recognized executive action verbs.
             </p>
           </div>
         </div>
 
-        {/* Detailed Breakdown Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Keyword Category Breakdown */}
-          <div className="bg-[#111827] border border-[#1F2937] rounded-xl p-6 shadow-xl">
-            <h3 className="font-bold text-base text-slate-100 mb-4 font-['Plus_Jakarta_Sans']">
-              Skill Density &amp; Market Alignment
-            </h3>
-            <div className="space-y-4 text-xs">
-              <div>
-                <div className="flex justify-between mb-1">
-                  <span className="text-slate-300 font-medium">Frontend Ecosystem &amp; UI Architecture</span>
-                  <span className="font-mono text-[#4edea3]">96% Match</span>
-                </div>
-                <div className="w-full bg-[#1c1f2a] h-2 rounded-full overflow-hidden">
-                  <div className="bg-[#4edea3] h-full rounded-full" style={{ width: '96%' }}></div>
-                </div>
-              </div>
+        {/* Technical Keyword Distribution */}
+        <section className="p-5 rounded-lg bg-[#111724] border border-white/[0.08] space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
+            <div>
+              <h2 className="text-xs font-bold text-white font-mono uppercase tracking-wider">
+                Technical Keyword Matrix ({totalSkills} Keywords)
+              </h2>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Distribution across categories targeted by technical search queries.
+              </p>
+            </div>
+            <span className="text-[10px] font-mono text-slate-500">Live Inventory</span>
+          </div>
 
-              <div>
-                <div className="flex justify-between mb-1">
-                  <span className="text-slate-300 font-medium">Distributed State &amp; WebGL 3D</span>
-                  <span className="font-mono text-[#c0c1ff]">92% Match</span>
-                </div>
-                <div className="w-full bg-[#1c1f2a] h-2 rounded-full overflow-hidden">
-                  <div className="bg-[#c0c1ff] h-full rounded-full" style={{ width: '92%' }}></div>
-                </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="space-y-1.5 p-3 rounded bg-[#0d121c] border border-white/[0.06]">
+              <span className="text-[11px] font-mono text-slate-400">Languages ({languagesCount})</span>
+              <div className="text-xs text-slate-200 font-mono truncate">
+                {data.skills?.languages?.join(', ') || 'None specified'}
               </div>
+            </div>
 
-              <div>
-                <div className="flex justify-between mb-1">
-                  <span className="text-slate-300 font-medium">Cloud Infrastructure &amp; CI/CD</span>
-                  <span className="font-mono text-[#ffb783]">84% Match</span>
-                </div>
-                <div className="w-full bg-[#1c1f2a] h-2 rounded-full overflow-hidden">
-                  <div className="bg-[#ffb783] h-full rounded-full" style={{ width: '84%' }}></div>
-                </div>
+            <div className="space-y-1.5 p-3 rounded bg-[#0d121c] border border-white/[0.06]">
+              <span className="text-[11px] font-mono text-slate-400">Frameworks ({frameworksCount})</span>
+              <div className="text-xs text-slate-200 font-mono truncate">
+                {data.skills?.frameworks?.join(', ') || 'None specified'}
               </div>
+            </div>
 
-              <div>
-                <div className="flex justify-between mb-1">
-                  <span className="text-slate-300 font-medium">System Design &amp; Team Mentorship</span>
-                  <span className="font-mono text-emerald-400">89% Match</span>
-                </div>
-                <div className="w-full bg-[#1c1f2a] h-2 rounded-full overflow-hidden">
-                  <div className="bg-emerald-400 h-full rounded-full" style={{ width: '89%' }}></div>
-                </div>
+            <div className="space-y-1.5 p-3 rounded bg-[#0d121c] border border-white/[0.06]">
+              <span className="text-[11px] font-mono text-slate-400">Tools ({toolsCount})</span>
+              <div className="text-xs text-slate-200 font-mono truncate">
+                {data.skills?.tools?.join(', ') || 'None specified'}
+              </div>
+            </div>
+
+            <div className="space-y-1.5 p-3 rounded bg-[#0d121c] border border-white/[0.06]">
+              <span className="text-[11px] font-mono text-slate-400">Cloud & Infra ({cloudCount})</span>
+              <div className="text-xs text-slate-200 font-mono truncate">
+                {data.skills?.cloud?.join(', ') || 'None specified'}
               </div>
             </div>
           </div>
+        </section>
 
-          {/* AI Recommendations Checklist */}
-          <div className="bg-[#111827] border border-[#1F2937] rounded-xl p-6 shadow-xl">
-            <h3 className="font-bold text-base text-slate-100 mb-4 font-['Plus_Jakarta_Sans']">
-              AI Priority Checklist
-            </h3>
-            <div className="space-y-3 text-xs">
-              <div className="flex gap-3 items-start p-3 bg-[#1c1f2a] rounded-lg border border-emerald-800/30">
-                <CheckCircle2 className="w-4 h-4 text-[#4edea3] shrink-0 mt-0.5" />
-                <div>
-                  <div className="font-bold text-slate-200">High-Impact Verb Variety</div>
-                  <div className="text-slate-400 mt-0.5">
-                    No repeated passive phrases detected in your recent roles.
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-3 items-start p-3 bg-[#1c1f2a] rounded-lg border border-emerald-800/30">
-                <CheckCircle2 className="w-4 h-4 text-[#4edea3] shrink-0 mt-0.5" />
-                <div>
-                  <div className="font-bold text-slate-200">Length Optimization</div>
-                  <div className="text-slate-400 mt-0.5">
-                    Total word count is 482 words, strictly within the high-retention 1-page standard.
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-3 items-start p-3 bg-[#1c1f2a] rounded-lg border border-amber-800/30">
-                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                <div>
-                  <div className="font-bold text-slate-200">Include Web Vitals Metric</div>
-                  <div className="text-slate-400 mt-0.5">
-                    Adding specific Core Web Vitals figures (e.g. LCP under 1.2s) will boost Senior Staff match by +5%.
-                  </div>
-                </div>
-              </div>
-            </div>
+        {/* Structural Audit Checklist */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-bold text-white font-mono uppercase tracking-wider">
+              ATS Compliance Verification Checklist
+            </h2>
+            <span className="text-[11px] font-mono text-slate-400">
+              {passedCount} / {checks.length} Checks Passed
+            </span>
           </div>
-        </div>
+
+          <div className="divide-y divide-white/[0.06] rounded-lg border border-white/[0.08] bg-[#111724]">
+            {checks.map((check, idx) => (
+              <div
+                key={idx}
+                className="p-3.5 flex items-center justify-between gap-4 text-xs"
+              >
+                <div className="flex items-center gap-2.5">
+                  {check.passed ? (
+                    <CheckCircle2 className="w-4 h-4 text-blue-400 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                  )}
+                  <span className="font-semibold text-slate-200">{check.label}</span>
+                </div>
+                <span className="text-[11px] font-mono text-slate-400 truncate text-right">
+                  {check.desc}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
     </div>
   );

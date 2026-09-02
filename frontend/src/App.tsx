@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ResumeData, ActivityItem, ActiveTab } from './types';
-//import { initialResumeData, initialActivities } from './data/mockData';
-import { SideNavBar } from './components/SideNavBar';
-import { TopAppBar } from './components/TopAppBar';
+import { initialResumeData, initialActivities } from './data/mockData';
+import { AppShell } from './components/layout/AppShell';
 import { DashboardView } from './components/DashboardView';
 import { ResumeStudioView } from './components/ResumeStudioView';
 import { AIChatView } from './components/AIChatView';
@@ -17,39 +16,32 @@ import confetti from 'canvas-confetti';
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
-    const [resumeData, setResumeData] = useState<ResumeData>({
-    id: '',
-    title: '',
-    status: 'DRAFT',
-    personalInfo: {
-      firstName: '',
-      lastName: '',
-      email: '',
-      phone: '',
-      location: '',
-      title: '',
-      summary: '',
-      linkedin: '',
-      github: '',
-    },
-    experience: [],
-    skills: {
-      languages: [],
-      frameworks: [],
-      tools: [],
-      cloud: [],
-    },
-    education: [],
-    projects: [],
-    metrics: {
-      resumeScore: 0,
-      jdMatchRate: 0,
-      profileViews: 0,
-      aiCredits: 50,
-    },
+
+  // Initialize with local storage if available, otherwise high-quality mock data
+  const [resumeData, setResumeData] = useState<ResumeData>(() => {
+    try {
+      const saved = localStorage.getItem('intelliresume_data');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.warn('Failed to load resumeData from localStorage:', e);
+    }
+    return initialResumeData;
   });
 
-  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [activities, setActivities] = useState<ActivityItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('intelliresume_activities');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.warn('Failed to load activities from localStorage:', e);
+    }
+    return initialActivities;
+  });
+
   const [searchQuery, setSearchQuery] = useState('');
 
   // Modals
@@ -216,9 +208,33 @@ export default function App() {
   };
 
   const handleSaveDraft = () => {
-    confetti({ particleCount: 30, spread: 45, origin: { y: 0.8 } });
-    showToast('Resume draft state saved to cloud workspace.');
+    try {
+      localStorage.setItem('intelliresume_data', JSON.stringify(resumeData));
+      localStorage.setItem('intelliresume_activities', JSON.stringify(activities));
+      confetti({ particleCount: 35, spread: 50, origin: { y: 0.8 } });
+      showToast('Resume draft state saved to workspace storage.');
+    } catch (err) {
+      console.warn('Could not save to localStorage:', err);
+      showToast('Resume draft state updated.');
+    }
   };
+
+  // Global productivity shortcuts: Ctrl/Cmd+S (Save Draft), Ctrl/Cmd+P (Print)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSaveDraft();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+        if (activeTab === 'studio') {
+          e.preventDefault();
+          window.print();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [resumeData, activities, activeTab]);
 
   // If Auth tab is active or not authenticated, render Auth Portal
   if (!isAuthenticated || activeTab === 'auth') {
@@ -233,94 +249,71 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen w-screen bg-[#0B0F19] text-[#dfe2f1] overflow-hidden font-sans ">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[#1c1f2a] border border-[#4edea3]/50 text-slate-100 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 text-xs font-medium animate-in slide-in-from-bottom-5 duration-300">
-          <span className="w-2 h-2 rounded-full bg-[#4edea3] animate-pulse"></span>
-          <span>{toastMessage}</span>
-        </div>
-      )}
-
-      {/* Side Navigation Bar */}
-      <SideNavBar
+    <>
+      <AppShell
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        resumeData={resumeData}
+        toastMessage={toastMessage}
         onNewResume={handleNewResume}
         onOpenAIGenerator={() => setIsAIGenerateOpen(true)}
-      />
+        onOpenJDMatcher={() => setIsJDModalOpen(true)}
+        onOpenAIReview={() => setIsAIReviewOpen(true)}
+        onSaveDraft={handleSaveDraft}
+      >
+        {activeTab === 'dashboard' && (
+          <DashboardView
+            data={resumeData}
+            activities={activities}
+            setActiveTab={setActiveTab}
+            onOpenJDMatcher={() => setIsJDModalOpen(true)}
+            onOpenAIGenerator={() => setIsAIGenerateOpen(true)}
+            onNewResume={handleNewResume}
+          />
+        )}
 
-      {/* Main Content Area (Offset for 80px sidebar) */}
-      <div className="flex-1 flex flex-col pl-[80px] h-full overflow-hidden">
-        {/* Top App Bar */}
-        <TopAppBar
-          currentView={activeTab}
-          onSelectView={(view) => setActiveTab(view as ActiveTab)}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          onOpenAIGenerator={() => setIsAIGenerateOpen(true)}
-          onOpenHelp={() =>
-            alert(
-              'IntelliResume AI Studio\n\n- Click "AI Generator" in the top bar to generate tailored resumes\n- Edit all fields live in the Studio panel\n- Switch between 3D View and Flat Printable PDF in the viewport\n- Click "Export PDF" for instant browser download / print'
-            )
-          }
-        />
+        {activeTab === 'studio' && (
+          <ResumeStudioView
+            data={resumeData}
+            setData={setResumeData}
+            onOpenJDMatcher={() => setIsJDModalOpen(true)}
+            onOpenAIReview={() => setIsAIReviewOpen(true)}
+            onOpenAIGenerator={() => setIsAIGenerateOpen(true)}
+            onSaveDraft={handleSaveDraft}
+          />
+        )}
 
-        {/* Dynamic Views */}
-        <main className="flex-1 flex overflow-hidden relative">
-          {activeTab === 'dashboard' && (
-            <DashboardView
-              data={resumeData}
-              activities={activities}
-              setActiveTab={setActiveTab}
-              onOpenJDMatcher={() => setIsJDModalOpen(true)}
-              onOpenAIGenerator={() => setIsAIGenerateOpen(true)}
-              onNewResume={handleNewResume}
-            />
-          )}
+        {activeTab === 'chat' && (
+          <AIChatView
+            resumeData={resumeData}
+            onApplyOptionToResume={(text) => {
+              setResumeData((prev) => {
+                const updatedExp = [...prev.experience];
+                if (updatedExp[0]) {
+                  updatedExp[0].bullets[0] = text;
+                }
+                return { ...prev, experience: updatedExp };
+              });
+              showToast('Applied bullet to Resume experience!');
+            }}
+          />
+        )}
 
-          {activeTab === 'studio' && (
-            <ResumeStudioView
-              data={resumeData}
-              setData={setResumeData}
-              onOpenJDMatcher={() => setIsJDModalOpen(true)}
-              onOpenAIReview={() => setIsAIReviewOpen(true)}
-              onOpenAIGenerator={() => setIsAIGenerateOpen(true)}
-              onSaveDraft={handleSaveDraft}
-            />
-          )}
+        {activeTab === 'analytics' && (
+          <AnalyticsView
+            data={resumeData}
+            onOpenJDMatcher={() => setIsJDModalOpen(true)}
+          />
+        )}
 
-          {activeTab === 'chat' && (
-            <AIChatView
-              resumeData={resumeData}
-              onApplyOptionToResume={(text) => {
-                setResumeData((prev) => {
-                  const updatedExp = [...prev.experience];
-                  if (updatedExp[0]) {
-                    updatedExp[0].bullets[0] = text;
-                  }
-                  return { ...prev, experience: updatedExp };
-                });
-                showToast('Applied bullet to Resume experience!');
-              }}
-            />
-          )}
-
-          {activeTab === 'analytics' && (
-            <AnalyticsView
-              data={resumeData}
-              onOpenJDMatcher={() => setIsJDModalOpen(true)}
-            />
-          )}
-
-          {activeTab === 'settings' && (
-            <SettingsView
-              resumeData={resumeData}
-              onSave={() => showToast('Settings saved successfully.')}
-            />
-          )}
-        </main>
-      </div>
+        {activeTab === 'settings' && (
+          <SettingsView
+            resumeData={resumeData}
+            onUpdateResumeData={setResumeData}
+            onSave={() => showToast('Settings saved successfully.')}
+          />
+        )}
+      </AppShell>
 
       {/* Modals */}
       <AIGenerateModal
@@ -343,6 +336,6 @@ export default function App() {
         resumeData={resumeData}
         onApplyImprovement={handleApplyAIImprovement}
       />
-    </div>
+    </>
   );
 }

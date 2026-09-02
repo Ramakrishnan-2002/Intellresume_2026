@@ -1,19 +1,19 @@
 import React from 'react';
 import { ResumeData, ActivityItem, ActiveTab } from '../types';
 import {
-  Plus,
+  FileEdit,
   Target,
-  Bot,
-  TrendingUp,
-  Eye,
-  Coins,
   Sparkles,
-  FileText,
-  UploadCloud,
   ArrowRight,
-  Clock,
-  Wand2,
+  AlertCircle,
+  Plus,
+  Compass,
+  FileText,
+  Printer,
+  ChevronRight,
+  ShieldCheck,
 } from 'lucide-react';
+import { Button } from './ui/Button';
 
 interface DashboardViewProps {
   data: ResumeData;
@@ -32,221 +32,332 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenAIGenerator,
   onNewResume,
 }) => {
+  // Real derived checklist items based on actual resume data
+  const triageItems = [];
+
+  const bulletsCount =
+    data.experience?.reduce((acc, exp) => acc + (exp.bullets?.length || 0), 0) || 0;
+
+  const quantifiedBulletsCount =
+    data.experience?.reduce(
+      (acc, exp) =>
+        acc +
+        (exp.bullets?.filter((b) => /\d+%|\$\d+|\d+\+|\d+x|\b\d+\b/.test(b)).length || 0),
+      0
+    ) || 0;
+
+  if (!data.personalInfo?.summary || data.personalInfo.summary.length < 50) {
+    triageItems.push({
+      id: 'summary',
+      severity: 'high',
+      title: 'Executive summary is brief or incomplete',
+      description: 'A 2-3 sentence overview establishes your seniority and engineering scope.',
+      actionLabel: 'Edit Summary',
+      onClick: () => setActiveTab('studio'),
+    });
+  }
+
+  if (bulletsCount > 0 && quantifiedBulletsCount / bulletsCount < 0.5) {
+    triageItems.push({
+      id: 'metrics',
+      severity: 'medium',
+      title: `${bulletsCount - quantifiedBulletsCount} bullets lack measurable outcomes`,
+      description: 'Strengthen bullet points with concrete percentages, latency numbers, or scale indicators.',
+      actionLabel: 'Upgrade Bullets',
+      onClick: () => setActiveTab('studio'),
+    });
+  }
+
+  if (!data.skills?.tools || data.skills.tools.length < 4) {
+    triageItems.push({
+      id: 'tools',
+      severity: 'medium',
+      title: 'Toolchain skills coverage is low',
+      description: 'Target applicant tracking systems by specifying developer tools and frameworks.',
+      actionLabel: 'Add Skills',
+      onClick: () => setActiveTab('studio'),
+    });
+  }
+
+  const score = data.metrics?.resumeScore || 88;
+
   return (
-    <div className="flex-1 overflow-y-auto p-6 lg:p-8 bg-[#090D16] text-[#dfe2f1]">
-      <div className="max-w-[1400px] mx-auto space-y-8">
-        {/* Welcome & Actions (Bento Style) */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Main Welcome Bento Card */}
-          <div className="col-span-1 md:col-span-2 bg-[#111827] border border-[#1F2937] hover:border-slate-700/60 rounded-xl p-6 sm:p-8 flex flex-col justify-between relative overflow-hidden transition-all shadow-xl">
-            <div className="z-10">
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-[#c0c1ff] mb-2 font-['Plus_Jakarta_Sans']">
-                Welcome back, Architect
-              </h2>
-              <p className="text-slate-400 text-sm max-w-lg leading-relaxed">
-                Your AI telemetry and PDF generator are online. Backend Gemini intelligence will structure and tailor your resume for any technical role.
-              </p>
+    <div className="flex-1 overflow-y-auto p-4 sm:p-8 lg:p-10 bg-[#080c14] text-[#f8fafc] font-sans selection:bg-blue-600/30 selection:text-blue-200">
+      <div className="max-w-5xl mx-auto space-y-8">
+        {/* Workspace Masthead */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.08] pb-6">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-mono uppercase tracking-wider text-blue-400 font-semibold">
+                Career Engineering Workspace
+              </span>
+              <span className="text-slate-600">•</span>
+              <span className="text-xs text-slate-400 font-mono">v2026</span>
             </div>
-
-            <div className="flex flex-wrap gap-3 mt-8 z-10">
-              <button
-                onClick={onOpenAIGenerator}
-                className="btn-spring bg-gradient-to-r from-emerald-500 to-blue-600 hover:from-emerald-400 hover:to-blue-500 text-white px-5 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 shadow-lg shadow-emerald-500/20"
-              >
-                <Sparkles className="w-4 h-4 animate-pulse" />
-                <span>Generate Resume with AI</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  onNewResume();
-                  setActiveTab('studio');
-                }}
-                className="btn-spring bg-[#1c1f2a] border border-[#3c4a42]/50 hover:border-[#4edea3]/50 text-slate-200 px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-all hover:bg-[#262a35]"
-              >
-                <Plus className="w-4 h-4 text-[#4edea3]" />
-                <span>New Workspace</span>
-              </button>
-
-              <button
-                onClick={onOpenJDMatcher}
-                className="btn-spring bg-[#1c1f2a] border border-[#3c4a42]/50 hover:border-[#c0c1ff]/50 text-slate-200 px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-all hover:bg-[#262a35]"
-              >
-                <Target className="w-4 h-4 text-[#c0c1ff]" />
-                <span>Match Job Description</span>
-              </button>
-            </div>
-
-            {/* Abstract Gradient Glow Decoration */}
-            <div className="absolute right-0 top-0 w-80 h-full bg-gradient-to-l from-indigo-600/10 via-purple-600/5 to-transparent pointer-events-none"></div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight font-['Plus_Jakarta_Sans']">
+              {data.personalInfo.firstName} {data.personalInfo.lastName}
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-400 mt-1 flex items-center gap-2">
+              <span className="text-slate-300 font-medium">{data.title || 'Senior Software Engineer'}</span>
+              <span>•</span>
+              <span className="font-mono text-blue-400 font-semibold">{score}% ATS Ready</span>
+              <span>•</span>
+              <span className="text-slate-500">Draft saved locally</span>
+            </p>
           </div>
 
-          {/* AI Advisor Bento Card */}
-          <div
-            onClick={() => setActiveTab('chat')}
-            className="bg-[#111827] border border-[#1F2937] hover:border-[#4edea3]/50 rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-300 group btn-spring shadow-xl"
-          >
-            <div className="w-14 h-14 rounded-2xl bg-[#4edea3]/15 border border-[#4edea3]/30 flex items-center justify-center text-[#4edea3] mb-4 group-hover:scale-110 group-hover:shadow-[0_0_20px_rgba(78,222,163,0.3)] transition-all">
-              <Bot className="w-7 h-7" />
-            </div>
-            <h3 className="text-lg font-bold text-slate-100 font-['Plus_Jakarta_Sans'] flex items-center gap-1.5">
-              <span>Consult AI Assistant</span>
-              <ArrowRight className="w-4 h-4 text-[#4edea3] opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-            </h3>
-            <p className="text-slate-400 mt-1 text-xs">Real-time prompt engineering &amp; career intelligence</p>
+          <div className="flex items-center gap-2.5">
+            <Button
+              variant="primary"
+              size="md"
+              onClick={() => setActiveTab('studio')}
+              className="gap-2 shadow-sm font-semibold"
+            >
+              <FileEdit className="w-4 h-4" />
+              <span>Open Resume Studio</span>
+            </Button>
+            <Button
+              variant="secondary"
+              size="md"
+              onClick={onNewResume}
+              className="gap-1.5"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New</span>
+            </Button>
           </div>
-        </section>
+        </div>
 
-        {/* Telemetry Overview Metrics */}
-        <section>
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="font-mono text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Telemetry Overview
-            </h3>
-            <span className="text-[11px] font-mono text-[#4edea3] flex items-center gap-1">
-              <Sparkles className="w-3 h-3" /> Live ATS Synced
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Metric 1: Resume Score */}
-            <div className="bg-[#111827] border border-[#1F2937] rounded-xl p-4 flex flex-col justify-between hover:border-slate-700 transition-all">
-              <div>
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-slate-400 text-xs font-medium">Resume Score</span>
-                  <TrendingUp className="w-4 h-4 text-[#4edea3]" />
-                </div>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="font-mono text-3xl font-extrabold text-slate-100">
-                    {data.metrics.resumeScore}
-                  </span>
-                  <span className="font-mono text-xs text-slate-500">/100</span>
-                </div>
-              </div>
-              <div className="mt-4 bg-[#1c1f2a] h-1.5 rounded-full overflow-hidden">
-                <div
-                  className="bg-[#4edea3] h-full rounded-full transition-all duration-500"
-                  style={{ width: `${data.metrics.resumeScore}%` }}
-                ></div>
-              </div>
-            </div>
-
-            {/* Metric 2: JD Match Rate */}
-            <div className="bg-[#111827] border border-[#1F2937] rounded-xl p-4 flex flex-col justify-between hover:border-slate-700 transition-all">
-              <div>
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-slate-400 text-xs font-medium">JD Match Rate</span>
-                  <Target className="w-4 h-4 text-[#c0c1ff]" />
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="font-mono text-3xl font-extrabold text-[#c0c1ff]">
-                    {data.metrics.jdMatchRate}%
-                  </span>
-                  <span className="font-mono text-[11px] text-[#4edea3] font-bold">+4%</span>
-                </div>
-              </div>
-              <div className="mt-4 bg-[#1c1f2a] h-1.5 rounded-full overflow-hidden">
-                <div
-                  className="bg-[#c0c1ff] h-full rounded-full transition-all duration-500"
-                  style={{ width: `${data.metrics.jdMatchRate}%` }}
-                ></div>
-              </div>
-            </div>
-
-            {/* Metric 3: Profile Views */}
-            <div className="bg-[#111827] border border-[#1F2937] rounded-xl p-4 flex flex-col justify-between hover:border-slate-700 transition-all">
-              <div>
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-slate-400 text-xs font-medium">Profile Views</span>
-                  <Eye className="w-4 h-4 text-slate-400" />
-                </div>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="font-mono text-3xl font-extrabold text-slate-100">
-                    {data.metrics.profileViews.toLocaleString()}
-                  </span>
-                </div>
-              </div>
-              <div className="mt-3">
-                <span className="inline-block bg-[#4edea3]/10 text-[#4edea3] border border-[#4edea3]/20 font-mono text-[10px] font-bold px-2 py-0.5 rounded-full">
-                  High Traffic
+        {/* Central 2-Column Desk: Active Resume Sheet on Left, Action Pipeline on Right */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Left: Active Resume Document Preview Card */}
+          <div className="lg:col-span-7 bg-[#0e1424] border border-white/[0.08] rounded-xl p-6 relative overflow-hidden group hover:border-blue-500/30 transition-all">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.06]">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-blue-400" />
+                <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+                  Primary Resume Sheet
                 </span>
               </div>
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-blue-950/60 text-blue-300 border border-blue-500/30">
+                Job-Ready
+              </span>
             </div>
 
-            {/* Metric 4: AI Credits */}
-            <div className="bg-[#111827] border border-[#1F2937] rounded-xl p-4 flex flex-col justify-between hover:border-slate-700 transition-all">
+            {/* Document Header Representation */}
+            <div className="bg-[#070b14] border border-white/[0.06] rounded-lg p-5 space-y-4">
               <div>
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-slate-400 text-xs font-medium">AI Intelligence</span>
-                  <Coins className="w-4 h-4 text-[#ffb783]" />
-                </div>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="font-mono text-3xl font-extrabold text-slate-100">
-                    {data.metrics.aiCredits}
-                  </span>
-                  <span className="font-mono text-xs text-slate-500">Credits</span>
-                </div>
+                <h3 className="text-base font-bold text-white font-['Plus_Jakarta_Sans']">
+                  {data.personalInfo.firstName} {data.personalInfo.lastName}
+                </h3>
+                <p className="text-xs text-blue-400 font-mono mt-0.5">
+                  {data.title || data.personalInfo.title}
+                </p>
+                <p className="text-[11px] text-slate-400 mt-1 font-mono">
+                  {data.personalInfo.email} • {data.personalInfo.location}
+                </p>
               </div>
-              <div className="mt-3">
-                <span className="font-mono text-[11px] text-[#4edea3]">
-                  Unlimited Pro Access
+
+              {/* Summary snippet */}
+              <div className="border-t border-white/[0.06] pt-3">
+                <span className="text-[10px] font-mono uppercase text-slate-500 block mb-1">
+                  Executive Summary
                 </span>
+                <p className="text-xs text-slate-300 leading-relaxed line-clamp-3">
+                  {data.personalInfo.summary || 'No summary entered yet.'}
+                </p>
               </div>
-            </div>
-          </div>
-        </section>
 
-        {/* Activity Feed Timeline */}
-        <section className="bg-[#111827] rounded-xl border border-[#1F2937] overflow-hidden shadow-xl">
-          <div className="px-6 py-4 border-b border-[#1F2937] flex justify-between items-center">
-            <h3 className="font-mono text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Activity Timeline
-            </h3>
-            <span className="text-xs font-mono text-slate-500">Live Sync</span>
-          </div>
-
-          <div className="p-6 space-y-6">
-            {activities.map((item, idx) => (
-              <div key={item.id} className="flex gap-4 relative">
-                {idx < activities.length - 1 && (
-                  <div className="absolute left-4 top-8 bottom-[-24px] w-px bg-[#1F2937]"></div>
-                )}
-
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center z-10 flex-shrink-0 border ${
-                    item.type === 'rewrite'
-                      ? 'bg-[#4edea3]/15 border-[#4edea3]/40 text-[#4edea3]'
-                      : 'bg-[#1c1f2a] border-[#3c4a42]/40 text-slate-400'
-                  }`}
-                >
-                  {item.type === 'rewrite' && <Sparkles className="w-4 h-4" />}
-                  {item.type === 'generate' && <FileText className="w-4 h-4" />}
-                  {item.type === 'parse' && <UploadCloud className="w-4 h-4" />}
-                  {item.type === 'match' && <Target className="w-4 h-4" />}
-                </div>
-
-                <div className="flex-1">
-                  <div className="flex justify-between items-baseline mb-1 flex-wrap gap-2">
-                    <h4 className="font-semibold text-sm text-slate-200 font-['Plus_Jakarta_Sans']">
-                      {item.title}
-                    </h4>
-                    <span className="font-mono text-[11px] text-slate-500 flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {item.time}
+              {/* Top experience preview */}
+              {data.experience && data.experience[0] && (
+                <div className="border-t border-white/[0.06] pt-3">
+                  <span className="text-[10px] font-mono uppercase text-slate-500 block mb-1">
+                    Current Position
+                  </span>
+                  <div className="flex items-center justify-between text-xs text-slate-200 font-medium">
+                    <span>{data.experience[0].role}</span>
+                    <span className="text-[11px] font-mono text-slate-400">
+                      {data.experience[0].company}
                     </span>
                   </div>
-                  <p className="text-slate-400 text-xs mb-2">{item.description}</p>
-
-                  {item.quote && (
-                    <div className="bg-[#1c1f2a] rounded-lg p-3 border border-[#1F2937] border-l-2 border-l-[#4edea3] text-xs font-mono text-slate-300">
-                      {item.quote}
-                    </div>
+                  {data.experience[0].bullets?.[0] && (
+                    <p className="text-[11px] text-slate-400 mt-1 leading-relaxed line-clamp-2">
+                      • {data.experience[0].bullets[0]}
+                    </p>
                   )}
                 </div>
+              )}
+            </div>
+
+            {/* Actions Bar inside sheet */}
+            <div className="mt-5 flex items-center justify-between pt-2">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setActiveTab('studio')}
+                className="gap-1.5"
+              >
+                <span>Continue in Studio</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => window.print()}
+                  className="gap-1.5 text-xs"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Print PDF</span>
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={onOpenAIGenerator}
+                  className="gap-1.5 text-xs"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Regenerate</span>
+                </Button>
               </div>
-            ))}
+            </div>
           </div>
-        </section>
+
+          {/* Right: The 4-Step Career Workflow Pipeline */}
+          <div className="lg:col-span-5 space-y-3">
+            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono mb-2">
+              Career Workflow Actions
+            </h2>
+
+            {/* Step 1: Resume Studio */}
+            <div
+              onClick={() => setActiveTab('studio')}
+              className="p-4 rounded-xl border border-white/[0.08] bg-[#0e1424] hover:border-blue-500/40 cursor-pointer transition-all flex items-start gap-3.5 group"
+            >
+              <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0 group-hover:scale-105 transition-transform">
+                <FileEdit className="w-4 h-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-white font-['Plus_Jakarta_Sans'] group-hover:text-blue-300 transition-colors">
+                    1. Resume Studio
+                  </h3>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-white transition-colors" />
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                  Edit sections with inline AI bullet rewrites and live vector preview.
+                </p>
+              </div>
+            </div>
+
+            {/* Step 2: Target a Job */}
+            <div
+              onClick={onOpenJDMatcher}
+              className="p-4 rounded-xl border border-white/[0.08] bg-[#0e1424] hover:border-sky-500/40 cursor-pointer transition-all flex items-start gap-3.5 group"
+            >
+              <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 shrink-0 group-hover:scale-105 transition-transform">
+                <Target className="w-4 h-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-white font-['Plus_Jakarta_Sans'] group-hover:text-sky-300 transition-colors">
+                    2. Target a Job Description
+                  </h3>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-white transition-colors" />
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                  Compare alignment against specific roles to identify keyword gaps.
+                </p>
+              </div>
+            </div>
+
+            {/* Step 3: AI Career Coach */}
+            <div
+              onClick={() => setActiveTab('chat')}
+              className="p-4 rounded-xl border border-white/[0.08] bg-[#0e1424] hover:border-purple-500/40 cursor-pointer transition-all flex items-start gap-3.5 group"
+            >
+              <div className="w-8 h-8 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0 group-hover:scale-105 transition-transform">
+                <Compass className="w-4 h-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-white font-['Plus_Jakarta_Sans'] group-hover:text-purple-300 transition-colors">
+                    3. AI Career Coach
+                  </h3>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-white transition-colors" />
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                  Multi-turn strategic coaching grounded in your active resume data.
+                </p>
+              </div>
+            </div>
+
+            {/* Step 4: ATS Readiness */}
+            <div
+              onClick={() => setActiveTab('analytics')}
+              className="p-4 rounded-xl border border-white/[0.08] bg-[#0e1424] hover:border-indigo-500/40 cursor-pointer transition-all flex items-start gap-3.5 group"
+            >
+              <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0 group-hover:scale-105 transition-transform">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-white font-['Plus_Jakarta_Sans'] group-hover:text-indigo-300 transition-colors">
+                    4. ATS Telemetry & Checklist
+                  </h3>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-white transition-colors" />
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                  Verify word counts, action verb density, and structural compliance.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Actionable Triage Checklist */}
+        {triageItems.length > 0 && (
+          <div className="p-6 rounded-xl border border-white/[0.08] bg-[#0e1424] space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-400" />
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+                  Actionable Resume Refinements ({triageItems.length})
+                </h3>
+              </div>
+              <span className="text-[11px] text-slate-400">
+                Prioritized by recruiter impact
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {triageItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="p-3.5 rounded-lg border border-white/[0.06] bg-[#131d33] flex flex-col justify-between space-y-2.5"
+                >
+                  <div>
+                    <h4 className="text-xs font-semibold text-slate-200 leading-snug">
+                      {item.title}
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                      {item.description}
+                    </p>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={item.onClick}
+                    className="w-full justify-center text-xs h-7.5"
+                  >
+                    {item.actionLabel}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

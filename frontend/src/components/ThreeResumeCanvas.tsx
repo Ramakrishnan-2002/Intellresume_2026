@@ -1,54 +1,66 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { ResumeData } from '../types';
 import { ResumeDocument } from './ResumeDocument';
-import { ZoomIn, ZoomOut, RotateCcw, Download, Sparkles, LayoutTemplate, Eye } from 'lucide-react';
-import confetti from 'canvas-confetti';
+import {
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  LayoutTemplate,
+  Eye,
+  Maximize2,
+  Minimize2,
+  Printer,
+  Loader2,
+} from 'lucide-react';
 
 interface ThreeResumeCanvasProps {
   data: ResumeData;
+  isOriginalSize?: boolean;
+  onToggleOriginalSize?: () => void;
   onExportPDF?: () => void;
 }
 
-export const ThreeResumeCanvas: React.FC<ThreeResumeCanvasProps> = ({ data }) => {
+export const ThreeResumeCanvas: React.FC<ThreeResumeCanvasProps> = ({
+  data,
+  isOriginalSize = true,
+  onToggleOriginalSize,
+  onExportPDF,
+}) => {
   const [zoom, setZoom] = useState(1);
-  const [is3DMode, setIs3DMode] = useState(true);
+  const [is3DMode, setIs3DMode] = useState(false); // Default to clean flat document viewer
   const [template, setTemplate] = useState<'modern' | 'minimal' | 'executive'>('modern');
-  const [rotation, setRotation] = useState({ x: 2, y: -5 });
+  const [rotation, setRotation] = useState({ x: 2, y: -4 });
   const [isExporting, setIsExporting] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // Mouse tilt tracking in 3D mode
+  // Mouse tilt tracking in 3D mode only
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!is3DMode || !containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     const y = ((e.clientY - rect.top) / rect.height) * 2 - 1;
     setRotation({
-      x: -y * 8, // subtle pitch
-      y: x * 10, // subtle yaw
+      x: -y * 6,
+      y: x * 8,
     });
   };
 
   const handleMouseLeave = () => {
     if (is3DMode) {
-      setRotation({ x: 2, y: -5 }); // Return to default resting isometric angle
+      setRotation({ x: 2, y: -4 });
     }
   };
 
   const handleExportPDF = () => {
     setIsExporting(true);
-    confetti({
-      particleCount: 80,
-      spread: 70,
-      origin: { y: 0.6 },
-      colors: ['#4edea3', '#3b82f6', '#d0bcff'],
-    });
+    // Switch to flat mode and unscale so printout is 100% vector-sharp without any CSS transforms
+    setIs3DMode(false);
+    setZoom(1);
 
-    // Trigger browser print for pristine vector-accurate PDF output
     setTimeout(() => {
       window.print();
       setIsExporting(false);
-    }, 400);
+    }, 200);
   };
 
   return (
@@ -56,104 +68,121 @@ export const ThreeResumeCanvas: React.FC<ThreeResumeCanvasProps> = ({ data }) =>
       ref={containerRef}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      className="flex-1 relative bg-[#090D16] flex flex-col overflow-hidden h-full select-none"
+      className="flex-1 relative bg-[#060a12] flex flex-col overflow-hidden h-full select-none"
     >
-      {/* Viewport Toolbar */}
-      <div className="absolute top-4 right-4 z-30 flex items-center gap-2 bg-[#111827]/90 backdrop-blur-md p-1.5 rounded-lg border border-[#1F2937] shadow-xl no-print">
-        {/* Template Selector */}
-        <div className="relative group">
+      {/* Viewport Top Controls Toolbar */}
+      <div className="shrink-0 z-30 flex items-center justify-between px-3 sm:px-4 py-2 bg-[#0e1424] border-b border-white/[0.08] shadow-sm no-print gap-2">
+        {/* Left: Viewport Status & Dimensions Badge */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+          <span className="text-xs font-mono text-slate-200 font-semibold hidden sm:inline">
+            PDF Paper Canvas
+          </span>
+          <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-blue-950/60 text-blue-300 border border-blue-500/30">
+            8.5" × 11" Letter
+          </span>
+          <span className="text-[11px] font-mono text-slate-400 capitalize hidden md:inline">
+            • {template}
+          </span>
+        </div>
+
+        {/* Right: Actions Cluster */}
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          {/* Template Switcher */}
           <button
-            className="p-1.5 rounded hover:bg-[#1f2937] text-slate-400 hover:text-[#4edea3] transition-colors flex items-center gap-1.5 text-xs font-mono px-2"
-            title="Switch Template"
             onClick={() => {
               setTemplate((prev) =>
                 prev === 'modern' ? 'minimal' : prev === 'minimal' ? 'executive' : 'modern'
               );
             }}
+            className="h-7 px-2 rounded bg-[#131d33] hover:bg-[#1a2744] text-slate-300 hover:text-white border border-white/10 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="Switch Resume Style"
           >
-            <LayoutTemplate className="w-3.5 h-3.5" />
+            <LayoutTemplate className="w-3.5 h-3.5 text-blue-400" />
             <span className="capitalize hidden sm:inline">{template}</span>
           </button>
+
+          {/* 3D / Flat View Toggle */}
+          <button
+            onClick={() => setIs3DMode(!is3DMode)}
+            className={`h-7 px-2 rounded text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer border ${
+              is3DMode
+                ? 'bg-blue-950/60 text-blue-300 border-blue-500/40'
+                : 'bg-[#131d33] hover:bg-[#1a2744] text-slate-300 border-white/10'
+            }`}
+            title="Toggle between Flat Paper and 3D Showcase"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{is3DMode ? '3D' : 'Flat'}</span>
+          </button>
+
+          <div className="w-px h-4 bg-white/10 mx-0.5 hidden sm:block"></div>
+
+          {/* Zoom Controls */}
+          <button
+            onClick={() => setZoom((prev) => Math.min(prev + 0.1, 1.4))}
+            className="h-7 w-7 rounded bg-[#131d33] hover:bg-[#1a2744] text-slate-300 hover:text-white border border-white/10 flex items-center justify-center transition-colors cursor-pointer"
+            title="Zoom In"
+          >
+            <ZoomIn className="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            onClick={() => setZoom((prev) => Math.max(prev - 0.1, 0.7))}
+            className="h-7 w-7 rounded bg-[#131d33] hover:bg-[#1a2744] text-slate-300 hover:text-white border border-white/10 flex items-center justify-center transition-colors cursor-pointer"
+            title="Zoom Out"
+          >
+            <ZoomOut className="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            onClick={() => {
+              setZoom(1);
+              setRotation({ x: 2, y: -4 });
+            }}
+            className="h-7 px-2 rounded bg-[#131d33] hover:bg-[#1a2744] text-slate-300 hover:text-white border border-white/10 text-xs font-mono flex items-center gap-1 transition-colors cursor-pointer"
+            title="Reset Zoom to 100%"
+          >
+            <RotateCcw className="w-3 h-3" />
+            <span className="hidden sm:inline">100%</span>
+          </button>
+
+          <div className="w-px h-4 bg-white/10 mx-0.5"></div>
+
+          {/* Primary Export PDF Button */}
+          <button
+            onClick={handleExportPDF}
+            disabled={isExporting}
+            className="h-7 px-2.5 sm:px-3 bg-blue-600 hover:bg-blue-500 text-white rounded font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm disabled:opacity-50"
+            title="Export Vector-Accurate PDF Document"
+          >
+            {isExporting ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Printer className="w-3.5 h-3.5" />
+            )}
+            <span className="hidden sm:inline">{isExporting ? 'Preparing...' : 'Export PDF'}</span>
+          </button>
         </div>
-
-        {/* 3D / Flat View Toggle */}
-        <button
-          onClick={() => setIs3DMode(!is3DMode)}
-          className={`p-1.5 rounded text-xs font-mono flex items-center gap-1 px-2 transition-all ${
-            is3DMode
-              ? 'bg-[#4edea3]/10 text-[#4edea3] border border-[#4edea3]/30'
-              : 'hover:bg-[#1f2937] text-slate-400 hover:text-slate-200'
-          }`}
-          title="Toggle 3D Perspective"
-        >
-          <Eye className="w-3.5 h-3.5" />
-          <span>{is3DMode ? '3D View' : 'Flat View'}</span>
-        </button>
-
-        <div className="w-px h-5 bg-[#1F2937] self-center mx-0.5"></div>
-
-        {/* Zoom In */}
-        <button
-          onClick={() => setZoom((prev) => Math.min(prev + 0.15, 1.6))}
-          className="p-1.5 rounded hover:bg-[#1f2937] text-slate-400 hover:text-[#4edea3] transition-colors"
-          title="Zoom In"
-        >
-          <ZoomIn className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Zoom Out */}
-        <button
-          onClick={() => setZoom((prev) => Math.max(prev - 0.15, 0.65))}
-          className="p-1.5 rounded hover:bg-[#1f2937] text-slate-400 hover:text-[#4edea3] transition-colors"
-          title="Zoom Out"
-        >
-          <ZoomOut className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Reset */}
-        <button
-          onClick={() => {
-            setZoom(1);
-            setRotation({ x: 2, y: -5 });
-          }}
-          className="p-1.5 rounded hover:bg-[#1f2937] text-slate-400 hover:text-slate-200 transition-colors"
-          title="Reset Zoom & Rotation"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-        </button>
-
-        <div className="w-px h-5 bg-[#1F2937] self-center mx-0.5"></div>
-
-        {/* Export PDF Button */}
-        <button
-          onClick={handleExportPDF}
-          disabled={isExporting}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#4edea3] text-[#003824] hover:bg-[#6ffbbe] rounded font-bold text-xs shadow-md shadow-[#4edea3]/20 transition-all btn-spring"
-        >
-          <Download className="w-3.5 h-3.5" />
-          <span>{isExporting ? 'Exporting...' : 'Export PDF'}</span>
-        </button>
       </div>
 
-      {/* Ambient Live indicator badge */}
-      <div className="absolute top-4 left-4 z-20 flex items-center gap-2 bg-[#111827]/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-[#1F2937] text-xs font-mono no-print">
-        <div className="w-2 h-2 rounded-full bg-[#4edea3] animate-pulse shadow-[0_0_8px_#4edea3]"></div>
-        <span className="text-slate-300">Live 3D Viewport</span>
-      </div>
-
-      {/* 3D Viewport Stage */}
+      {/* Main Document Viewer Stage */}
       <div
-        className="flex-1 w-full h-full relative flex items-center justify-center p-6 sm:p-12 overflow-auto"
-        style={{ perspective: '1200px' }}
+        className="flex-1 w-full h-full relative overflow-auto p-4 sm:p-8 lg:p-10 flex justify-center items-start"
+        style={{ perspective: is3DMode ? '1400px' : 'none' }}
       >
+        {/* Paper Document Container (Guaranteed True 8.5" x 11" Original Dimensions) */}
         <div
-          className="w-full max-w-2xl sm:max-w-3xl aspect-[8.5/11] bg-white rounded-lg shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9),0_0_30px_rgba(78,222,163,0.12)] overflow-hidden relative transition-transform duration-300 ease-out border border-slate-700/20"
+          className="bg-white rounded-sm shadow-2xl transition-all duration-150 ease-out border border-slate-300 ring-1 ring-black/10 shrink-0 my-4"
           style={{
+            width: isOriginalSize ? '816px' : '100%',
+            maxWidth: isOriginalSize ? '816px' : '816px',
+            minWidth: isOriginalSize ? '816px' : '320px',
             transform: is3DMode
               ? `scale(${zoom}) rotateX(${rotation.x}deg) rotateY(${rotation.y}deg)`
               : `scale(${zoom})`,
-            transformStyle: 'preserve-3d',
-            transformOrigin: 'center center',
+            transformStyle: is3DMode ? 'preserve-3d' : 'flat',
+            transformOrigin: 'top center',
           }}
         >
           <ResumeDocument data={data} templateStyle={template} />

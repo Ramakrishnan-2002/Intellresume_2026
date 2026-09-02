@@ -45,18 +45,18 @@ export const BackgroundShader: React.FC<{ className?: string }> = ({ className =
         vec2 uv = v_texCoord;
         vec2 center = u_mouse / u_resolution;
         
-        // Distant dark obsidian background with subtle gradient
-        vec3 color = vec3(0.043, 0.059, 0.098); // #0B0F19
+        // Distant deep midnight background
+        vec3 color = vec3(0.031, 0.047, 0.078); // #080C14
         
-        // Emerald and Blue nebula-like pulses
+        // Royal Cobalt and Indigo ambient nebula pulses
         float dist = distance(uv, center);
         float pulse = 0.5 + 0.5 * sin(u_time * 0.5);
         
-        float emeraldGlow = smoothstep(0.6, 0.0, dist) * 0.15 * pulse;
-        color += vec3(0.062, 0.725, 0.505) * emeraldGlow; // Emerald #10B981
+        float cobaltGlow = smoothstep(0.6, 0.0, dist) * 0.18 * pulse;
+        color += vec3(0.145, 0.388, 0.921) * cobaltGlow; // Royal Cobalt #2563EB
         
-        float blueGlow = smoothstep(0.8, 0.1, distance(uv, vec2(1.0 - center.x, 1.0 - center.y))) * 0.1;
-        color += vec3(0.231, 0.509, 0.964) * blueGlow; // Hyper Blue #3B82F6
+        float indigoGlow = smoothstep(0.8, 0.1, distance(uv, vec2(1.0 - center.x, 1.0 - center.y))) * 0.12;
+        color += vec3(0.388, 0.400, 0.945) * indigoGlow; // Indigo #6366F1
 
         // Subtle digital grid overlay
         vec2 grid = fract(uv * 40.0 + u_time * 0.02);

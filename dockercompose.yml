@@ -18,7 +18,7 @@ services:
       - "3000:3000"
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - DISABLE_HMR=true
+      - CHOKIDAR_USEPOLLING=true
     volumes:
       - ./frontend:/app
       - /app/node_modules

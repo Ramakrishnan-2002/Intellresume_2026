@@ -12,9 +12,10 @@ export default defineConfig(() => {
       },
     },
     server: {
-      // Proxy removed — server.ts handles /api/* routes directly
-      hmr: process.env.DISABLE_HMR !== 'true',
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      watch: {
+        usePolling: true,
+        interval: 300,
+      },
     },
   };
 });
