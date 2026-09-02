@@ -137,3 +137,29 @@ class MatchJDResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     aiConfigured: bool
+
+class ResumeSaveRequest(BaseModel):
+    title: str
+    status: Optional[str] = "DRAFT"
+    data: ResumeData
+    version: int = 1  # Client expected version for OCC
+
+class ResumeRecordOut(BaseModel):
+    id: int
+    user_id: int
+    resume_id: str
+    title: str
+    status: str
+    data: ResumeData
+    version: int
+    class Config:
+        from_attributes = True
+
+class ResumeListItem(BaseModel):
+    id: int
+    resume_id: str
+    title: str
+    status: str
+    version: int
+    class Config:
+        from_attributes = True
