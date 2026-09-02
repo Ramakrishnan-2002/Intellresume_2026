@@ -10,15 +10,20 @@ router = APIRouter(prefix="/api/resumes", tags=["Resumes"])
 
 @router.get("", response_model=List[ResumeListItem])
 async def list_resumes(db: db_dependency, current_user: User = Depends(get_current_user)):
-    """List all resumes belonging to the authenticated user."""
+    """List all resumes belonging strictly to the authenticated user."""
     resumes = db.query(Resume).filter(Resume.user_id == current_user.id).order_by(Resume.updated_at.desc()).all()
     return resumes
 
 @router.get("/{resume_id}", response_model=ResumeRecordOut)
 async def get_resume(resume_id: str, db: db_dependency, current_user: User = Depends(get_current_user)):
-    """Retrieve a specific resume for the user."""
+    """Retrieve a specific resume strictly owned by the authenticated user."""
     resume = db.query(Resume).filter(Resume.resume_id == resume_id, Resume.user_id == current_user.id).first()
     if not resume:
+        # Check if it exists for another user to verify isolation (for internal security audit)
+        cross_user = db.query(Resume).filter(Resume.resume_id == resume_id).first()
+        if cross_user:
+            # Resource exists but owned by someone else -> prevent BOLA/IDOR
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this resume")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found")
     
     parsed_data = json.loads(resume.data)
@@ -70,49 +75,68 @@ async def update_resume(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Update resume with Optimistic Concurrency Control (OCC).
-    Rejects with 409 Conflict if client version does not match database version.
+    Update resume with TRUE ATOMIC Optimistic Concurrency Control (Compare-And-Swap).
+    Atomically updates WHERE version == req.version.
+    If 0 rows were updated, checks whether it was a version conflict or non-existent document.
     """
-    resume = db.query(Resume).filter(Resume.resume_id == resume_id, Resume.user_id == current_user.id).first()
-    if not resume:
+    # 1. Check ownership & existence first to handle BOLA
+    existing = db.query(Resume).filter(Resume.resume_id == resume_id).first()
+    if not existing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found")
+    if existing.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: you do not own this resume")
 
-    # Optimistic Concurrency Control check
-    if resume.version != req.version:
+    # 2. Atomic Compare-And-Swap (CAS) in database transaction
+    rows_affected = db.query(Resume).filter(
+        Resume.resume_id == resume_id,
+        Resume.user_id == current_user.id,
+        Resume.version == req.version,  # Compare version atomically
+    ).update(
+        {
+            Resume.title: req.title,
+            Resume.status: req.status or "DRAFT",
+            Resume.data: json.dumps(req.data.model_dump()),
+            Resume.version: Resume.version + 1,  # Swap version
+        },
+        synchronize_session=False,
+    )
+
+    if rows_affected == 0:
+        # Atomic update failed because current version in DB != req.version
+        db.rollback()
+        current_in_db = db.query(Resume).filter(Resume.resume_id == resume_id, Resume.user_id == current_user.id).first()
+        current_ver = current_in_db.version if current_in_db else "unknown"
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "error": "OPTIMISTIC_CONCURRENCY_CONFLICT",
-                "message": f"Resume was modified by another session. Current version is {resume.version}, but client submitted version {req.version}.",
-                "serverVersion": resume.version,
+                "message": f"Resume was modified by another session. Current version is {current_ver}, but client submitted version {req.version}.",
+                "serverVersion": current_ver,
                 "clientVersion": req.version,
             },
         )
 
-    resume.title = req.title
-    resume.status = req.status or resume.status
-    resume.data = json.dumps(req.data.model_dump())
-    resume.version = resume.version + 1  # Increment version on commit
-
     db.commit()
-    db.refresh(resume)
+    updated = db.query(Resume).filter(Resume.resume_id == resume_id, Resume.user_id == current_user.id).first()
 
     return ResumeRecordOut(
-        id=resume.id,
-        user_id=resume.user_id,
-        resume_id=resume.resume_id,
-        title=resume.title,
-        status=resume.status,
+        id=updated.id,
+        user_id=updated.user_id,
+        resume_id=updated.resume_id,
+        title=updated.title,
+        status=updated.status,
         data=req.data,
-        version=resume.version,
+        version=updated.version,
     )
 
 @router.delete("/{resume_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_resume(resume_id: str, db: db_dependency, current_user: User = Depends(get_current_user)):
-    """Delete resume document."""
-    resume = db.query(Resume).filter(Resume.resume_id == resume_id, Resume.user_id == current_user.id).first()
+    """Delete resume document strictly verifying ownership."""
+    resume = db.query(Resume).filter(Resume.resume_id == resume_id).first()
     if not resume:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found")
+    if resume.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: you do not own this resume")
     db.delete(resume)
     db.commit()
     return None

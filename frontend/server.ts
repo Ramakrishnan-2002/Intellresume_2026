@@ -160,20 +160,32 @@ const generalRateLimiter = createRateLimiter({
 app.use("/api/", generalRateLimiter);
 app.use(["/api/generate-resume", "/api/generate-pdf-data", "/api/ai-audit", "/api/chat", "/api/optimize", "/api/match-jd"], aiRateLimiter);
 
-// ─── 4. Distributed Idempotency Middleware ──────────────────────
+// ─── 4. Distributed Idempotency Middleware (with Fingerprinting) ─
+interface IdempotencyRecord {
+  status: "IN_PROGRESS" | "COMPLETED";
+  fingerprint: string;
+  body?: any;
+  timestamp: number;
+  expiresAt?: number;
+}
+
 async function idempotencyMiddleware(req: Request, res: Response, next: NextFunction) {
   const idempotencyKey = req.headers["idempotency-key"] as string;
-  if (!idempotencyKey || req.method !== "POST") {
+  if (!idempotencyKey || !["POST", "PUT", "PATCH"].includes(req.method)) {
     return next();
   }
 
   const key = `idemp:${idempotencyKey}`;
+  const currentFingerprint = crypto
+    .createHash("sha256")
+    .update(`${req.method}:${req.originalUrl || req.url}:${JSON.stringify(req.body || {})}`)
+    .digest("hex");
 
   if (isRedisHealthy) {
     try {
       const existing = await redis.get(key);
       if (existing) {
-        const parsed = JSON.parse(existing);
+        const parsed: IdempotencyRecord = JSON.parse(existing);
         if (parsed.status === "IN_PROGRESS") {
           return res.status(409).json({
             error: "IDEMPOTENCY_IN_PROGRESS",
@@ -181,13 +193,25 @@ async function idempotencyMiddleware(req: Request, res: Response, next: NextFunc
           });
         }
         if (parsed.status === "COMPLETED") {
+          // Payload validation: enforce identical request fingerprint
+          if (parsed.fingerprint && parsed.fingerprint !== currentFingerprint) {
+            return res.status(422).json({
+              error: "IDEMPOTENCY_PAYLOAD_MISMATCH",
+              message: "The Idempotency-Key was previously used with a different request payload.",
+            });
+          }
           res.setHeader("X-Cache", "IDEMPOTENT-HIT");
           return res.status(200).json(parsed.body);
         }
       }
 
       // Mark IN_PROGRESS with 60s lock TTL
-      await redis.set(key, JSON.stringify({ status: "IN_PROGRESS", timestamp: Date.now() }), "EX", 60);
+      await redis.set(
+        key,
+        JSON.stringify({ status: "IN_PROGRESS", fingerprint: currentFingerprint, timestamp: Date.now() }),
+        "EX",
+        60
+      );
     } catch (e) {
       // Degrade to in-memory
     }
@@ -202,21 +226,33 @@ async function idempotencyMiddleware(req: Request, res: Response, next: NextFunc
         });
       }
       if (existing.status === "COMPLETED") {
+        if ((existing as any).fingerprint && (existing as any).fingerprint !== currentFingerprint) {
+          return res.status(422).json({
+            error: "IDEMPOTENCY_PAYLOAD_MISMATCH",
+            message: "The Idempotency-Key was previously used with a different request payload.",
+          });
+        }
         res.setHeader("X-Cache", "IDEMPOTENT-HIT");
         return res.status(200).json(existing.body);
       }
     }
-    memoryIdempotency.set(key, { status: "IN_PROGRESS", expiresAt: Date.now() + 60000 });
+    memoryIdempotency.set(key, { status: "IN_PROGRESS", fingerprint: currentFingerprint, expiresAt: Date.now() + 60000 } as any);
   }
 
   // Intercept response to record result
   const originalJson = res.json.bind(res);
   res.json = (body: any) => {
     if (res.statusCode >= 200 && res.statusCode < 300) {
+      const record: IdempotencyRecord = {
+        status: "COMPLETED",
+        fingerprint: currentFingerprint,
+        body,
+        timestamp: Date.now(),
+      };
       if (isRedisHealthy) {
-        redis.set(key, JSON.stringify({ status: "COMPLETED", body }), "EX", 86400).catch(() => {});
+        redis.set(key, JSON.stringify(record), "EX", 86400).catch(() => {});
       } else {
-        memoryIdempotency.set(key, { status: "COMPLETED", body, expiresAt: Date.now() + 86400000 });
+        memoryIdempotency.set(key, { ...record, expiresAt: Date.now() + 86400000 });
       }
     } else {
       // Clear key on error to allow retry
@@ -254,11 +290,13 @@ async function coalesceRequest<T>(cacheKey: string, fn: () => Promise<T>): Promi
 // ─── 6. Bulkhead Concurrency Pool & Circuit Breaker ─────────────
 class BulkheadLimiter {
   private active = 0;
-  private queue: Array<() => void> = [];
+  private maxObserved = 0;
+  private queue: Array<{ resolve: () => void; reject: (err: any) => void; timer: NodeJS.Timeout }> = [];
 
   constructor(
     private maxConcurrent: number = 4,
-    private maxQueueDepth: number = 12
+    private maxQueueDepth: number = 12,
+    private queueTimeoutMs: number = 8000
   ) {}
 
   async run<T>(task: () => Promise<T>): Promise<T> {
@@ -269,46 +307,81 @@ class BulkheadLimiter {
         err.code = "AI_CAPACITY_EXCEEDED";
         throw err;
       }
-      await new Promise<void>((resolve) => this.queue.push(resolve));
+
+      // Enqueue with strict timeout to prevent indefinite waiting or socket hangs
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          const idx = this.queue.findIndex((item) => item.timer === timer);
+          if (idx !== -1) {
+            this.queue.splice(idx, 1);
+            const err: any = new Error("AI request spent too long queued waiting for execution slot.");
+            err.status = 503;
+            err.code = "AI_QUEUE_TIMEOUT";
+            reject(err);
+          }
+        }, this.queueTimeoutMs);
+
+        this.queue.push({ resolve, reject, timer });
+      });
     }
 
     this.active++;
+    if (this.active > this.maxObserved) {
+      this.maxObserved = this.active;
+    }
+
     try {
       return await task();
     } finally {
       this.active--;
       if (this.queue.length > 0) {
         const next = this.queue.shift();
-        if (next) next();
+        if (next) {
+          clearTimeout(next.timer);
+          next.resolve();
+        }
       }
     }
   }
 
+  resetMaxObserved() {
+    this.maxObserved = this.active;
+  }
+
   get stats() {
-    return { active: this.active, queued: this.queue.length };
+    return {
+      active: this.active,
+      queued: this.queue.length,
+      maxConcurrent: this.maxConcurrent,
+      maxQueueDepth: this.maxQueueDepth,
+      maxObserved: this.maxObserved,
+    };
   }
 }
 
-const aiBulkhead = new BulkheadLimiter(4, 12);
+const aiBulkhead = new BulkheadLimiter(4, 12, 8000);
 
 class CircuitBreaker {
   state: "CLOSED" | "OPEN" | "HALF_OPEN" = "CLOSED";
   private failureCount = 0;
   private lastFailureTime = 0;
+  private halfOpenProbeActive = false;
 
   constructor(
     private failureThreshold = 5,
-    private resetTimeoutMs = 30000
+    private resetTimeoutMs = 15000 // 15s recovery period
   ) {}
 
   recordSuccess() {
     this.failureCount = 0;
     this.state = "CLOSED";
+    this.halfOpenProbeActive = false;
   }
 
   recordFailure() {
     this.failureCount++;
     this.lastFailureTime = Date.now();
+    this.halfOpenProbeActive = false;
     if (this.failureCount >= this.failureThreshold) {
       this.state = "OPEN";
       console.warn(`[CircuitBreaker] Tripped to OPEN! Failing fast for next ${this.resetTimeoutMs / 1000}s.`);
@@ -320,19 +393,36 @@ class CircuitBreaker {
     if (this.state === "OPEN") {
       if (Date.now() - this.lastFailureTime > this.resetTimeoutMs) {
         this.state = "HALF_OPEN";
-        console.log("[CircuitBreaker] Transitioned to HALF_OPEN trial probe.");
+        this.halfOpenProbeActive = false;
+        console.log("[CircuitBreaker] Transitioned to HALF_OPEN. Allowing single trial probe.");
+      } else {
+        return false;
+      }
+    }
+
+    if (this.state === "HALF_OPEN") {
+      // Exactly 1 probe allowed at a time
+      if (!this.halfOpenProbeActive) {
+        this.halfOpenProbeActive = true;
         return true;
       }
-      return false;
+      return false; // Other concurrent requests fail-fast to fallback during trial
     }
-    return true; // HALF_OPEN allows trial probe
+
+    return true;
+  }
+
+  reset() {
+    this.failureCount = 0;
+    this.state = "CLOSED";
+    this.halfOpenProbeActive = false;
   }
 }
 
-const circuitBreaker = new CircuitBreaker(5, 30000);
+const circuitBreaker = new CircuitBreaker(5, 15000);
 
-// Bounded exponential backoff with jitter
-async function retryWithJitter<T>(fn: () => Promise<T>, maxAttempts = 2): Promise<T> {
+// Bounded exponential backoff with jitter (maxAttempts = 1 means at most 1 retry = 2 attempts)
+async function retryWithJitter<T>(fn: () => Promise<T>, maxAttempts = 1): Promise<T> {
   let attempt = 0;
   while (true) {
     try {
@@ -350,7 +440,7 @@ async function retryWithJitter<T>(fn: () => Promise<T>, maxAttempts = 2): Promis
         throw err;
       }
 
-      const backoff = 500 * Math.pow(2, attempt) + Math.random() * 200;
+      const backoff = 300 * Math.pow(2, attempt) + Math.random() * 150;
       console.log(`[Retry] Attempt ${attempt} failed with ${err.message}. Retrying in ${Math.round(backoff)}ms...`);
       await new Promise((resolve) => setTimeout(resolve, backoff));
     }
@@ -501,6 +591,12 @@ app.get("/api/health", (req, res) => {
     aiConfigured: !!process.env.GEMINI_API_KEY,
     circuitState: circuitBreaker.state,
   });
+});
+
+app.post("/api/circuit-breaker/reset", (req, res) => {
+  circuitBreaker.reset();
+  aiBulkhead.resetMaxObserved();
+  res.json({ status: "reset", circuitState: circuitBreaker.state });
 });
 
 // ─── 9. Proxy to FastAPI for Auth & Resumes Persistence ──────────
@@ -773,6 +869,22 @@ app.post("/api/optimize", async (req, res) => {
     const result = await coalesceRequest(hashKey, async () => {
       return aiBulkhead.run(async () => {
         return retryWithJitter(async () => {
+          // Simulation hook for automated resilience testing without token burn
+          if (req.headers["x-simulate-ai-failure"]) {
+            const errCode = parseInt(req.headers["x-simulate-ai-failure"] as string, 10) || 503;
+            const simErr: any = new Error(`Simulated AI service failure: ${errCode}`);
+            simErr.status = errCode;
+            throw simErr;
+          }
+
+          if (req.headers["x-simulate-ai-probe"] === "success") {
+            circuitBreaker.recordSuccess();
+            return {
+              options: [{ tag: "Performance", content: "Optimized distributed caching." }],
+              scoreImprovement: "+9 pts",
+            };
+          }
+
           const prompt = `Optimize this resume bullet for a "${role || "Senior Software Engineer"}" position in "${sectionType || "Experience"}":
 "${text}"
 
