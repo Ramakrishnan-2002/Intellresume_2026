@@ -136,7 +136,7 @@ graph TD
 - **Activities**:
   - Practice 30-second, 2-minute, and 5-minute architecture walkthroughs.
   - Review capacity formulas, SQLite scaling boundaries, and the 5-phase evolution roadmap.
-  - Rehearse the 180 curated interview questions in `docs/SYSTEM_DESIGN_STUDY_GUIDE.md`.
+  - Rehearse the curated interview defense questions in `docs/mastery/SYSTEM_DESIGN.md`.
 
 ---
 
